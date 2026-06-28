@@ -20,5 +20,11 @@ public:
 	}
 	Vec3(Point* start, Point* end) :Vec3((*end).x - (*start).x, (*end).y - (*start).y, (*end).z - (*start).z) {
 	}
-
+	Vec3& operator=(const Point& p) {
+		x = p.x;
+		y = p.y;
+		z = p.z;
+		len = p.length();
+		return *this;
+	}
 };

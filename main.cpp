@@ -2,45 +2,45 @@
 #include<Windows.h>
 #include<fstream>
 #include<string>
-#include "utils.hxx"
-#include "point.hxx"
-#include "vec3.hxx"
-#include "triangle.hxx"
+//#include "utils.hxx"
+#include "mesh.hxx"
+
 int main() {
-
-#if 0 
-	std::string filePath = "D:/Code/c/test01/a.obj";
-	std::ifstream input(filePath);
-	if (input.is_open()) {
-		std::cout << "open success" << std::endl;
+	std::string filePath = "D:/Code/ObjTmp/a.obj";
+	std::string outputPath = "D:/Code/ObjTmp/exported.obj";
+	std::string basePath = "D:/Code/ObjTmp/";
+	Mesh mesh(filePath);
+	try {
+		std::cout << "load success" << std::endl;
+		std::cout << "vertex count: " << mesh.vertexCount() << std::endl;
+		std::cout << "edge count: " << mesh.edgeCount() << std::endl;
+		std::cout << "triangle count: " << mesh.triangleCount() << std::endl;
 	}
-	std::string str;
-	int i = 0;
-	std::vector<Point*> points;
-	std::vector<Triangle*> triangels;
-	double x, y, z;
-	int o, p, q;
-	while (std::getline(input, str)) {
-		char type[10];
-		sscanf(str.c_str(), "%s %lf %lf %lf", type, &x, &y, &z);
-		if (int(type[0]) == 118) {
-			Point* point = new Point(x, y, z);
-			points.push_back(point);
-		}
-		if (int(type[0]) == 102) {
-			sscanf(str.c_str(), "%s %d %d %d", type, &o, &p, &q);
-			Triangle* triangle = new Triangle(points[o - 1], points[p - 1], points[q - 1]);
-			triangels.push_back(triangle);
-		}
-		//std::cout << int(type[0]) << "  x:" << x << "  y:" << y << "  z:" << z << std::endl;
+	catch (const std::exception& e) {
+		std::cout << e.what() << std::endl;
+		return 1;
 	}
-#endif
-	std::cout << "hello world" << std::endl;
-	Point* p1 = new Point(1, 0, 0);
-	Point* p2 = new Point(0, 1, 0);
-	Point* p3 = new Point(0, 0, 1);
+	std::vector<std::vector<Vertex*>> components = mesh.connectedVertexComponents();
+	for (std::size_t i = 0; i < components.size(); ++i) {
+		auto tris = mesh.collectTriangleFromVertexComponent(components[i]);
 
-	std::cout << p1 << std::endl;
+		std::cout << "component " << i
+			<< " vertex count = " << components[i].size()
+			<< ", triangle count = " << tris.size()
+			<< std::endl;
+	}
+	std::vector<Mesh> meshs = mesh.splitComponents();
+	int index = 0;
+	for (std::vector<Mesh>::iterator it = meshs.begin(); it != meshs.end(); it++) {
+		it->exportObj(basePath + std::to_string(index) + ".obj");
+		index++;
+	}
+
+
+
+	std::vector<std::vector<Triangle*>> tricomps = mesh.connectedTriangleComponents();
+	mesh.exportObj(outputPath);
+
 
 
 	return 0;

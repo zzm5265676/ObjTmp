@@ -1,11 +1,6 @@
 #pragma once 
 #include <cmath>
 #include <iostream>
-#ifndef POINT_H
-#define POINT_H
-
-#include <iostream>
-#include <cmath>
 
 class Point {
 public:
@@ -167,18 +162,16 @@ public:
 	// 归一化（返回单位向量，不修改自身）
 	Point normalize() const {
 		double len = length();
-		if (len == 0) return Point(0, 0, 0);
+		if (len < 1e-12) return Point(0, 0, 0);
 		return *this / len;
 	}
 
 	// 就地归一化（修改自身）
 	Point& normalized() {
 		double len = length();
-		if (len != 0) {
+		if (len > 1e-12) {
 			x /= len;  y /= len;  z /= len;
 		}
 		return *this;
 	}
 };
-
-#endif // POINT_H
