@@ -1,14 +1,24 @@
+/*****************************************************************//**
+ * \file   triangle.hxx
+ * \brief  Triangle 是一个有方向的三角面。
+ *         edges_[0] 应该对应 vertex(0) -> vertex(1)
+ *         edges_[1] 应该对应 vertex(1) -> vertex(2)
+ *         edges_[2] 应该对应 vertex(2) -> vertex(0)
+ * \author zzm
+ * \date   June 2026
+ *********************************************************************/
 #pragma once
 #include "vec3.hxx"
 #include <vector>
 #include "vertex.hxx"
-#include "memory.h"
+#include <memory>
+#include <array>
 class Edge;
 
 class Triangle {
 private:
-	std::vector<Vertex*> vertices_{ 3,nullptr };
-	std::vector<Edge*> edges_{ 3, nullptr };
+	std::array<Vertex*, 3> vertices_{ nullptr, nullptr, nullptr };
+	std::array<Edge*, 3> edges_{ nullptr, nullptr, nullptr };
 
 public:
 	int index = -1;

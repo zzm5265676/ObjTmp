@@ -1,3 +1,11 @@
+/*****************************************************************//**
+ * \file   vertex.hxx
+ * \brief  Vertex 是点对象，同时记录邻接关系。
+ *		   Vertex 不拥有 Edge / Triangle；
+ *         Vertex 只是记录拓扑连接。
+ * \author zzm
+ * \date   June 2026
+ *********************************************************************/
 #pragma once
 #include "point.hxx"
 #include "vec3.hxx"

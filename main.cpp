@@ -20,7 +20,8 @@ int main() {
 		std::cout << e.what() << std::endl;
 		return 1;
 	}
-	std::vector<std::vector<Vertex*>> components = mesh.connectedVertexComponents();
+	//mesh.printEdgeUsageSummary();
+	/*std::vector<std::vector<Vertex*>> components = mesh.connectedVertexComponents();
 	for (std::size_t i = 0; i < components.size(); ++i) {
 		auto tris = mesh.collectTriangleFromVertexComponent(components[i]);
 
@@ -35,11 +36,8 @@ int main() {
 		it->exportObj(basePath + std::to_string(index) + ".obj");
 		index++;
 	}
-
-
-
 	std::vector<std::vector<Triangle*>> tricomps = mesh.connectedTriangleComponents();
-	mesh.exportObj(outputPath);
+	mesh.exportObj(outputPath);*/
 
 
 

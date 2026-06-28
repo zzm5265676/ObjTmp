@@ -1,3 +1,11 @@
+/*****************************************************************//**
+ * \file   mesh.hxx
+ * \brief  Mesh 是唯一所有者。
+ *         vertices_ / edges_ / triangles_ 负责生命周期；
+ *         map 只做索引，不负责释放。
+ * \author zzm
+ * \date   June 2026
+ *********************************************************************/
 #pragma once 
 #include "point.hxx"
 #include "triangle.hxx"
@@ -9,6 +17,8 @@
 #include <fstream>
 #include <sstream>
 #include <queue>
+#include <stdexcept>
+#include <string>
 #include <iomanip>
 inline int parseObjVertexIndex(const std::string& token) {
 	std::size_t pos = token.find('/');
@@ -67,6 +77,24 @@ struct UndirectedEdgeIndexKeyHash {
 struct EdgePair {
 	Edge* ab = nullptr;
 	Edge* ba = nullptr;
+};
+
+//导入检查报告
+//构建出来的 Mesh 有没有自相矛盾
+struct MeshValidationReport {
+	std::vector<int> invalidVertexIndices;
+	std::vector<int> invalidTriangleIndices;
+	std::vector<int> degenerateTriangles;
+	std::vector<int> triangleEdgeMismatch;
+	std::vector<int> brokenOppositeEdges;
+
+	bool ok() const {
+		return invalidVertexIndices.empty()
+			&& invalidTriangleIndices.empty()
+			&& degenerateTriangles.empty()
+			&& triangleEdgeMismatch.empty()
+			&& brokenOppositeEdges.empty();
+	}
 };
 class Mesh {
 private:
@@ -162,6 +190,15 @@ public:
 	}
 	// 通过索引返回点
 	Vertex* findByIndex(int idx) {
+		if (idx < 0 || idx >= static_cast<int>(vertices_.size())) {
+			return nullptr;
+		}
+		return vertices_[idx].get();
+	}
+	const Vertex* findByIndex(int idx) const {
+		if (idx < 0 || idx >= static_cast<int>(vertices_.size())) {
+			return nullptr;
+		}
 		return vertices_[idx].get();
 	}
 	//通过点寻找边
@@ -184,10 +221,7 @@ public:
 		auto edge = std::make_unique<Edge>(idx, v0, v1);
 		Edge* raw = edge.get();
 
-		// 有向边（为传入的正向边）插入edges_
-		edges_.push_back(std::move(edge));
-		// 有向边（为传入的正向边）插入directed_edge_map_
-		directed_edge_map_.emplace(dkey, raw);
+
 
 
 
@@ -201,10 +235,13 @@ public:
 			Edge* opposite = rit->second;
 			// 如果你的 Edge 类支持 opposite，可以打开这两句
 			raw->setOpposite(opposite);
-			opposite->setOpposite(raw);
+			//opposite->setOpposite(raw);
 		}
 
-
+		// 有向边（为传入的正向边）插入edges_
+		edges_.push_back(std::move(edge));
+		// 有向边（为传入的正向边）插入directed_edge_map_
+		directed_edge_map_.emplace(dkey, raw);
 
 		// 无向边处理
 		// 构造无向边索引
@@ -232,6 +269,14 @@ public:
 		Vertex* firstVertex = findByIndex(firstIdx);
 		Vertex* secondVertex = findByIndex(secondIdx);
 		Vertex* thirdVertex = findByIndex(thirdIdx);
+		if (!firstVertex || !secondVertex || !thirdVertex) {
+			return nullptr;
+		}
+		if (firstVertex == secondVertex ||
+			secondVertex == thirdVertex ||
+			thirdVertex == firstVertex) {
+			return nullptr;
+		}
 		// 点加入点
 		// 边加入点
 		// 有向边加入edges_
@@ -249,6 +294,9 @@ public:
 		int triIndex = triangles_.size();
 		std::unique_ptr<Triangle> tri = std::make_unique<Triangle>(triIndex, firstVertex, secondVertex, thirdVertex);
 		Triangle* raw = tri.get();
+		if (raw->area < 1e-12) {
+			return nullptr;
+		}
 		//三角形加入triangles_
 		triangles_.push_back(std::move(tri));
 		//三角形加入点
@@ -504,4 +552,11 @@ public:
 
 		return true;
 	}
+
+	//拓扑检查报告
+	MeshValidationReport validateBasicTopology(double eps = 1e-12) const;
+	std::size_t directedTriangleCount(const Edge* e) const;
+	std::size_t undirectedTriangleCount(const EdgePair& pair) const;
+	void printEdgeUsageSummary() const;
 };
+

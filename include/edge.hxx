@@ -1,3 +1,12 @@
+/*****************************************************************//**
+ * \file   edge.hxx
+ * \brief  明确为有向边。
+ *         Edge(v0, v1) 表示 v0 -> v1；
+ *         oppositeEdge_ 指向 v1 -> v0；
+ *         triangles_ 存储使用这条有向边的 Triangle。
+ * \author zzm
+ * \date   June 2026
+ *********************************************************************/
 #pragma once
 #include "vertex.hxx"
 #include <unordered_set>
@@ -20,12 +29,6 @@ public:
 	// Directed edge constructor.
 	Edge(int idx, Vertex* v0, Vertex* v1) :v0_(v0), v1_(v1), index(idx) {
 
-	}
-	// Canonically ordered edge constructor.
-	Edge(Vertex* v0, Vertex* v1)
-		: Edge(-1,
-			v0->index <= v1->index ? v0 : v1,
-			v0->index <= v1->index ? v1 : v0) {
 	}
 
 	bool addTriangle(Triangle* tri) {

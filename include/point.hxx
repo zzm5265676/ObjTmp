@@ -1,7 +1,7 @@
 #pragma once 
 #include <cmath>
 #include <iostream>
-
+#include <stdexcept>
 class Point {
 public:
 	double x, y, z;
