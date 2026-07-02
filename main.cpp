@@ -6,6 +6,10 @@
 //#include "utils.hxx"
 #include "mesh.hxx"
 #include "creation.hxx"
+#include "repair.hxx"
+#include "bvh.hxx"
+#include "intersect.hxx"
+#include "csg.hxx"
 
 // 通用工厂函数：用 make_shared 构造任意类型
 template <typename T, typename... Args>
@@ -241,6 +245,136 @@ int main() {
 		std::cout << "sphere: (0,0,0) = " << (c1 == geo::PointClass::Inside ? "Inside" : (c1 == geo::PointClass::OnBoundary ? "OnBoundary" : "Outside")) << std::endl;
 		std::cout << "sphere: (5,0,0) = " << (c2 == geo::PointClass::Inside ? "Inside" : (c2 == geo::PointClass::OnBoundary ? "OnBoundary" : "Outside")) << std::endl;
 	}
+
+	// ===== Mesh Repair Demo =====
+	std::cout << "\n=== Mesh Repair ===" << std::endl;
+	{
+		auto repairBox = mesh_creation::api_make_box(2, 1, 1);
+		auto report = mesh_repair::repair(repairBox);
+		std::cout << "repair box: merged=" << report.mergedVertices
+			<< " degenerate=" << report.removedDegenerate
+			<< " flipped=" << report.flippedFaces << std::endl;
+	}
+
+	// ===== BVH Demo =====
+	std::cout << "\n=== BVH ===" << std::endl;
+	{
+		geo::BVH bvh(sphere);
+		std::cout << "BVH built for sphere (" << sphere.triangleCount() << " tris)" << std::endl;
+
+		// Ray query
+		Point origin(0, 0, 0);
+		Vec3 dir(1, 0, 0);
+		Point hit;
+		int triIdx;
+		if (bvh.raycast(origin, dir, 10.0, hit, triIdx)) {
+			std::cout << "ray hit at (" << hit.x << "," << hit.y << "," << hit.z
+				<< ") tri#" << triIdx << std::endl;
+		}
+
+		// Closest point query
+		Point query(2, 0, 0);
+		int closestTri;
+		Point closest = bvh.closestPoint(query, closestTri);
+		std::cout << "closest to (2,0,0): (" << closest.x << "," << closest.y << "," << closest.z
+			<< ") tri#" << closestTri << std::endl;
+	}
+
+	// ===== CSG Boolean Tests =====
+	std::cout << "\n=== CSG Boolean Tests ===" << std::endl;
+
+	// Helper lambda to run and export a boolean test
+	auto runTest = [&](const std::string& name, Mesh& a, Mesh& b) {
+		std::cout << "\n--- " << name << " ---" << std::endl;
+		std::cout << "A: " << a.vertexCount() << " verts, " << a.triangleCount() << " tris" << std::endl;
+		std::cout << "B: " << b.vertexCount() << " verts, " << b.triangleCount() << " tris" << std::endl;
+
+		auto u = csg::meshUnion(a, b);
+		auto i = csg::meshIntersection(a, b);
+		auto d = csg::meshDifference(a, b);
+
+		if (u.success) {
+			u.mesh.exportObj(basePath + name + "_union.obj");
+			std::cout << "union:        " << u.mesh.vertexCount() << " verts, "
+				<< u.mesh.triangleCount() << " tris" << std::endl;
+		}
+		if (i.success) {
+			i.mesh.exportObj(basePath + name + "_intersect.obj");
+			std::cout << "intersection: " << i.mesh.vertexCount() << " verts, "
+				<< i.mesh.triangleCount() << " tris" << std::endl;
+		}
+		if (d.success) {
+			d.mesh.exportObj(basePath + name + "_diff.obj");
+			std::cout << "difference:   " << d.mesh.vertexCount() << " verts, "
+				<< d.mesh.triangleCount() << " tris" << std::endl;
+		}
+	};
+
+	// Test 1: Two overlapping boxes (translate)
+	{
+		auto a = mesh_creation::api_make_box(2, 2, 2);
+		auto b = mesh_creation::api_make_box(2, 2, 2);
+		b.translate(1, 0, 0);
+		runTest("box_box", a, b);
+	}
+
+	// Test 2: Box and sphere (sphere inside box)
+	{
+		auto a = mesh_creation::api_make_box(2, 2, 2);
+		auto b = mesh_creation::api_make_sphere(0.8, 24);
+		runTest("box_sphere", a, b);
+	}
+
+	// Test 3: Two spheres (overlapping)
+	{
+		auto a = mesh_creation::api_make_sphere(1.0, 24);
+		auto b = mesh_creation::api_make_sphere(1.0, 24);
+		b.translate(0.8, 0, 0);
+		runTest("sphere_sphere", a, b);
+	}
+
+	// Test 4: Box and rotated prism
+	{
+		auto a = mesh_creation::api_make_box(2, 2, 2);
+		auto b = mesh_creation::api_make_prism(6, 3, 0.8, 0.8);
+		b.rotateEuler(0, 0, 3.14159 / 4.0);  // 45 degree rotation
+		runTest("box_prism_rotated", a, b);
+	}
+
+	// Test 5: Torus and sphere (complex intersection)
+	{
+		auto a = mesh_creation::api_make_torus(1.5, 0.5, 24);
+		auto b = mesh_creation::api_make_sphere(1.0, 24);
+		runTest("torus_sphere", a, b);
+	}
+
+	// Test 6: Cone inside box
+	{
+		auto a = mesh_creation::api_make_box(2, 2, 2);
+		auto b = mesh_creation::api_make_cone(0.8, 2.5, 24);
+		b.translate(0, -0.25, 0);
+		runTest("box_cone", a, b);
+	}
+
+	// Test 7: Frustum and sphere (offset and rotated)
+	{
+		auto a = mesh_creation::api_make_frustum(1.0, 0.5, 2.0, 24);
+		auto b = mesh_creation::api_make_sphere(0.7, 24);
+		b.translate(0.5, 0.5, 0);
+		b.rotateEuler(0.3, 0.5, 0);
+		runTest("frustum_sphere", a, b);
+	}
+
+	// Test 8: Two boxes at angle (edge intersection)
+	{
+		auto a = mesh_creation::api_make_box(3, 1, 1);
+		auto b = mesh_creation::api_make_box(3, 1, 1);
+		b.rotateEuler(0, 0, 3.14159 / 3.0);  // 60 degrees
+		runTest("box_box_angle", a, b);
+	}
+
+	std::cout << "\n=== All tests complete ===" << std::endl;
+	std::cout << "Exported OBJ files to: " << basePath << std::endl;
 
 	return 0;
 }
