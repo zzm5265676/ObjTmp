@@ -8,6 +8,12 @@ namespace {
 
 	using IndexSet = std::unordered_set<int>;
 
+	// è¾…åŠ©ï¼šæ£€æŸ¥ vector ä¸­æ˜¯å¦åŒ…å«æŸæŒ‡é’ˆ
+	template <typename T>
+	bool vecContains(const std::vector<T*>& vec, const T* ptr) {
+		return std::find(vec.begin(), vec.end(), ptr) != vec.end();
+	}
+
 	template <typename T>
 	bool owns(const std::unordered_set<const T*>& objects, const T* object) {
 		return object != nullptr && objects.find(object) != objects.end();
@@ -39,16 +45,16 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 	MeshValidationReport report;
 	eps = std::abs(eps);
 
-	// ±¨¸æ×Ö¶Î±£³ÖÍ·ÎÄ¼şÖĞµÄ¼ÈÓĞ½Ó¿Ú¡£ÏÈÓÃ¼¯ºÏÊÕ¼¯´íÎó£¬¿É±ÜÃâÒ»¸ö¶ÔÏóÒò
-	// ¶à¸ö²»±äÁ¿Í¬Ê±Ê§°Ü¶øÖØ¸´³öÏÖ£»·µ»ØÇ°ÔÙÅÅĞò£¬±£Ö¤±¨¸æ½á¹ûÎÈ¶¨¡£
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ö¶Î±ï¿½ï¿½ï¿½Í·ï¿½Ä¼ï¿½ï¿½ĞµÄ¼ï¿½ï¿½Ğ½Ó¿Ú¡ï¿½ï¿½ï¿½ï¿½Ã¼ï¿½ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½ï¿½ï¿½ó£¬¿É±ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¬Ê±Ê§ï¿½Ü¶ï¿½ï¿½Ø¸ï¿½ï¿½ï¿½ï¿½Ö£ï¿½ï¿½ï¿½ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ò£¬±ï¿½Ö¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¶ï¿½ï¿½ï¿½
 	IndexSet invalidVertices;
 	IndexSet invalidTriangles;
 	IndexSet degenerateTriangles;
 	IndexSet triangleEdgeMismatches;
 	IndexSet brokenEdges;
 
-	// Mesh µÄÁÚ½Ó¹ØÏµºÍË÷Òı±í±£´æµÄÊÇ·ÇÓµÓĞÂãÖ¸Õë¡£ÈÎºÎ½âÒıÓÃÖ®Ç°ÏÈÍ¨¹ı
-	// ËùÓĞÈ¨¼¯ºÏÈ·ÈÏÖ¸ÕëÊôÓÚµ±Ç° Mesh£¬±ÜÃâĞ£ÑéËğ»µÊı¾İÊ±ÔÙ´Î´¥·¢Î´¶¨ÒåĞĞÎª¡£
+	// Mesh ï¿½ï¿½ï¿½Ú½Ó¹ï¿½Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½Óµï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ë¡£ï¿½ÎºÎ½ï¿½ï¿½ï¿½ï¿½ï¿½Ö®Ç°ï¿½ï¿½Í¨ï¿½ï¿½
+	// ï¿½ï¿½ï¿½ï¿½È¨ï¿½ï¿½ï¿½ï¿½È·ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½Ç° Meshï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ğ£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½Ù´Î´ï¿½ï¿½ï¿½Î´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½
 	std::unordered_set<const Vertex*> ownedVertices;
 	std::unordered_set<const Edge*> ownedEdges;
 	std::unordered_set<const Triangle*> ownedTriangles;
@@ -66,10 +72,10 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 		if (triangle) ownedTriangles.insert(triangle.get());
 	}
 
-	// 1. Vertex Ğ£Ñé£º
-	//    a) index ±ØĞëµÈÓÚÈİÆ÷ÏÂ±ê£¬È·±£ README Ô¼¶¨µÄÎÈ¶¨ ID£»
-	//    b) ÈıÀàÁÚ½Ó¶ÔÏó±ØĞëÓÉµ±Ç° Mesh ÓµÓĞ£»
-	//    c) ÁÚ½Ó¶¥µãÓ¦Ë«Ïò£¬ÁÚ½Ó±ß/Ãæ±ØĞëÕæÊµ°üº¬µ±Ç°¶¥µã¡£
+	// 1. Vertex Ğ£ï¿½é£º
+	//    a) index ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â±ê£¬È·ï¿½ï¿½ README Ô¼ï¿½ï¿½ï¿½ï¿½ï¿½È¶ï¿½ IDï¿½ï¿½
+	//    b) ï¿½ï¿½ï¿½ï¿½ï¿½Ú½Ó¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Éµï¿½Ç° Mesh Óµï¿½Ğ£ï¿½
+	//    c) ï¿½Ú½Ó¶ï¿½ï¿½ï¿½Ó¦Ë«ï¿½ï¿½ï¿½Ú½Ó±ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ã¡£
 	for (std::size_t i = 0; i < vertices_.size(); ++i) {
 		const Vertex* vertex = vertices_[i].get();
 		const int index = static_cast<int>(i);
@@ -83,8 +89,7 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 
 		for (const Vertex* neighbor : vertex->getNeiVertics()) {
 			if (!owns(ownedVertices, neighbor) || neighbor == vertex
-				|| neighbor->getNeiVertics().find(
-					const_cast<Vertex*>(vertex)) == neighbor->getNeiVertics().end()) {
+				|| !vecContains(neighbor->getNeiVertics(), vertex)) {
 				invalidVertices.insert(index);
 			}
 		}
@@ -102,11 +107,11 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 		}
 	}
 
-	// 2. Triangle Ğ£Ñé£º
-	//    a) index ÓëÈİÆ÷ÏÂ±êÒ»ÖÂ£¬Èı¸ö¶¥µãÊôÓÚµ±Ç° Mesh£»
-	//    b) ¶¥µã²»ÄÜÖØ¸´£¬Ãæ»ı±ØĞëÊÇÓĞÏŞÇÒ²»Ğ¡ÓÚ eps£»
-	//    c) edge(0..2) ±ØĞëÒÀ´Î¶ÔÓ¦ v0->v1¡¢v1->v2¡¢v2->v0£»
-	//    d) Vertex/Edge ¶Ô Triangle µÄ·´ÏòÁÚ½Ó±ØĞë´æÔÚ¡£
+	// 2. Triangle Ğ£ï¿½é£º
+	//    a) index ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â±ï¿½Ò»ï¿½Â£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½Ç° Meshï¿½ï¿½
+	//    b) ï¿½ï¿½ï¿½ã²»ï¿½ï¿½ï¿½Ø¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò²ï¿½Ğ¡ï¿½ï¿½ epsï¿½ï¿½
+	//    c) edge(0..2) ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¶ï¿½Ó¦ v0->v1ï¿½ï¿½v1->v2ï¿½ï¿½v2->v0ï¿½ï¿½
+	//    d) Vertex/Edge ï¿½ï¿½ Triangle ï¿½Ä·ï¿½ï¿½ï¿½ï¿½Ú½Ó±ï¿½ï¿½ï¿½ï¿½ï¿½Ú¡ï¿½
 	for (std::size_t i = 0; i < triangles_.size(); ++i) {
 		const Triangle* triangle = triangles_[i].get();
 		const int index = static_cast<int>(i);
@@ -133,12 +138,9 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 			degenerateTriangles.insert(index);
 		}
 
-		if (v0->getNeiTriangles().find(const_cast<Triangle*>(triangle))
-			== v0->getNeiTriangles().end()
-			|| v1->getNeiTriangles().find(const_cast<Triangle*>(triangle))
-			== v1->getNeiTriangles().end()
-			|| v2->getNeiTriangles().find(const_cast<Triangle*>(triangle))
-			== v2->getNeiTriangles().end()) {
+		if (!vecContains(v0->getNeiTriangles(), triangle)
+			|| !vecContains(v1->getNeiTriangles(), triangle)
+			|| !vecContains(v2->getNeiTriangles(), triangle)) {
 			invalidTriangles.insert(index);
 		}
 
@@ -165,12 +167,12 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 		}
 	}
 
-	// 3. Edge Ğ£Ñé£º
-	//    a) index¡¢¶ËµãËùÓĞÈ¨¼° directed_edge_map_ ±ØĞëÒ»ÖÂ£»
-	//    b) EdgePair ÖĞµÄ ab/ba ²ÛÎ»±ØĞëÓë¹æ·¶»¯¶Ëµã·½ÏòÒ»ÖÂ£»
-	//    c) opposite ±ØĞëÊôÓÚ±¾ Mesh¡¢·½ÏòÏà·´ÇÒË«Ïò¶Ô³Æ£»
-	//    d) triangles_ ÖĞµÄÃæ±ØĞëÕæÊµÒıÓÃ¸ÃÓĞÏò±ß£»
-	//    e) Á½¸ö¶Ëµã±ØĞë±£´æ¸Ã±ß¼°±Ë´ËµÄÁÚ½Ó¹ØÏµ¡£
+	// 3. Edge Ğ£ï¿½é£º
+	//    a) indexï¿½ï¿½ï¿½Ëµï¿½ï¿½ï¿½ï¿½ï¿½È¨ï¿½ï¿½ directed_edge_map_ ï¿½ï¿½ï¿½ï¿½Ò»ï¿½Â£ï¿½
+	//    b) EdgePair ï¿½Ğµï¿½ ab/ba ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ·¶ï¿½ï¿½ï¿½Ëµã·½ï¿½ï¿½Ò»ï¿½Â£ï¿½
+	//    c) opposite ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú±ï¿½ Meshï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½à·´ï¿½ï¿½Ë«ï¿½ï¿½Ô³Æ£ï¿½
+	//    d) triangles_ ï¿½Ğµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½
+	//    e) ï¿½ï¿½ï¿½ï¿½ï¿½Ëµï¿½ï¿½ï¿½ë±£ï¿½ï¿½Ã±ß¼ï¿½ï¿½Ë´Ëµï¿½ï¿½Ú½Ó¹ï¿½Ïµï¿½ï¿½
 	for (std::size_t i = 0; i < edges_.size(); ++i) {
 		const Edge* edge = edges_[i].get();
 		const int index = static_cast<int>(i);
@@ -193,14 +195,11 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 			valid = false;
 		}
 
-		const UndirectedEdgeIndexKey ukey(from->index, to->index);
-		const auto uit = edge_map_.find(ukey);
-		if (uit == edge_map_.end()) {
-			valid = false;
-		}
-		else {
+		// éªŒè¯æ— å‘è¾¹å¯¹ï¼šæ£€æŸ¥ opposite è¾¹æ˜¯å¦åœ¨ directed_edge_map_ ä¸­
+		{
+			EdgePair pair = getUndirectedEdgePair(from->index, to->index);
 			const Edge* expected =
-				from->index == ukey.a ? uit->second.ab : uit->second.ba;
+				from->index < to->index ? pair.ab : pair.ba;
 			if (expected != edge) valid = false;
 		}
 
@@ -224,21 +223,17 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 			}
 		}
 
-		if (from->getNeiEdges().find(const_cast<Edge*>(edge))
-			== from->getNeiEdges().end()
-			|| to->getNeiEdges().find(const_cast<Edge*>(edge))
-			== to->getNeiEdges().end()
-			|| from->getNeiVertics().find(const_cast<Vertex*>(to))
-			== from->getNeiVertics().end()
-			|| to->getNeiVertics().find(const_cast<Vertex*>(from))
-			== to->getNeiVertics().end()) {
+		if (!vecContains(from->getNeiEdges(), edge)
+			|| !vecContains(to->getNeiEdges(), edge)
+			|| !vecContains(from->getNeiVertics(), to)
+			|| !vecContains(to->getNeiVertics(), from)) {
 			valid = false;
 		}
 
 		if (!valid) brokenEdges.insert(index);
 	}
 
-	// 4. ´Ó map ·´Ïò¼ì²éÈİÆ÷£¬²¶»ñ key ´íÎó¡¢Ğü¿ÕÖ¸ÕëÒÔ¼°Î´±» edges_ ÓµÓĞµÄ¶ÔÏó¡£
+	// 4. ï¿½ï¿½ map ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ key ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½Ô¼ï¿½Î´ï¿½ï¿½ edges_ Óµï¿½ĞµÄ¶ï¿½ï¿½ï¿½
 	for (const auto& entry : directed_edge_map_) {
 		const DirectedEdgeIndexKey& key = entry.first;
 		const Edge* edge = entry.second;
@@ -251,12 +246,13 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 		}
 	}
 
-	for (const auto& entry : edge_map_) {
+	// 4b. éªŒè¯æ— å‘è¾¹å¯¹çš„ opposite å…³ç³»
+	for (const auto& entry : collectUndirectedEdges()) {
 		const UndirectedEdgeIndexKey& key = entry.first;
 		const EdgePair& pair = entry.second;
 
 		const auto slotValid = [&](const Edge* edge, bool isAB) {
-			if (!edge) return true; // ¿Õ²ÛÎ»´ú±í±ß½ç±ß£¬²»ÊÇ½á¹¹´íÎó¡£
+			if (!edge) return true;
 			if (!owns(ownedEdges, edge)
 				|| !owns(ownedVertices, edge->from())
 				|| !owns(ownedVertices, edge->to())) {
@@ -274,8 +270,6 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 			brokenEdges.insert(pair.ba ? pair.ba->index : -1);
 		}
 
-		// Á½¸ö·½Ïò¶¼´æÔÚÊ±±ØĞë»¥Îª opposite£»½öÒ»¸ö·½Ïò´æÔÚÊ±ÊÇ±ß½ç±ß£¬
-		// ÒÑÓĞ·½Ïò²»Ó¦ÔÙÖ¸ÏòÆäËû Edge¡£
 		if (pair.ab && pair.ba) {
 			if (pair.ab->opposite() != pair.ba || pair.ba->opposite() != pair.ab) {
 				brokenEdges.insert(pair.ab->index);
@@ -299,13 +293,13 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 }
 
 std::size_t Mesh::directedTriangleCount(const Edge* e) const {
-	// ÓĞÏò±ßÖ»Í³¼ÆÖ±½Ó´æ·ÅÔÚ×ÔÉí triangles_ ÖĞµÄÃæ¡£
+	// ï¿½ï¿½ï¿½ï¿½ï¿½Ö»Í³ï¿½ï¿½Ö±ï¿½Ó´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ triangles_ ï¿½Ğµï¿½ï¿½æ¡£
 	return e ? e->triangles().size() : 0;
 }
 
 std::size_t Mesh::undirectedTriangleCount(const EdgePair& pair) const {
-	// Õı·´·½ÏòÀíÂÛÉÏ²»Ó¦´æ·ÅÍ¬Ò»¸ö Triangle¡£ÕâÀïÊ¹ÓÃ¼¯ºÏ²¢¼¯¶ø²»ÊÇ¼òµ¥Ïà¼Ó£¬
-	// ¼´Ê¹Êı¾İÒÑ¾­Ëğ»µ£¬Ò²²»»á°ÑÍ¬Ò»¸öÃæ´íÎóµØÍ³¼ÆÁ½´Î¡£
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï²ï¿½Ó¦ï¿½ï¿½ï¿½Í¬Ò»ï¿½ï¿½ Triangleï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ã¼ï¿½ï¿½Ï²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç¼ï¿½ï¿½ï¿½Ó£ï¿½
+	// ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¾ï¿½ï¿½ğ»µ£ï¿½Ò²ï¿½ï¿½ï¿½ï¿½ï¿½Í¬Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í³ï¿½ï¿½ï¿½ï¿½ï¿½Î¡ï¿½
 	std::unordered_set<const Triangle*> triangles;
 	if (pair.ab) {
 		triangles.insert(pair.ab->triangles().begin(),
@@ -326,8 +320,7 @@ void Mesh::printEdgeUsageSummary() const {
 	std::size_t inconsistentOrientationCount = 0;
 	std::size_t brokenPairCount = 0;
 
-	// »ã×ÜÒ²¿ÉÄÜÓÃÓÚÕï¶ÏÒÑ¾­Ëğ»µµÄ Mesh£¬Òò´Ë²»ÄÜÖ±½ÓĞÅÈÎ edge_map_ ÖĞµÄÂãÖ¸Õë¡£
-	// ÏÈ½¨Á¢ËùÓĞÈ¨¼¯ºÏ£»Ö»ÓĞÊôÓÚµ±Ç° Mesh µÄ Edge/Vertex ²ÅÔÊĞí½âÒıÓÃ¡£
+	// å…ˆåšæ‰€æœ‰æƒæ ¡éªŒï¼Œåªå¼•ç”¨å½“å‰ Mesh æ‹¥æœ‰çš„ Edge/Vertex
 	std::unordered_set<const Edge*> ownedEdges;
 	std::unordered_set<const Vertex*> ownedVertices;
 	ownedEdges.reserve(edges_.size());
@@ -339,9 +332,10 @@ void Mesh::printEdgeUsageSummary() const {
 		if (vertex) ownedVertices.insert(vertex.get());
 	}
 
-	// °´ÎŞÏò±ß·ÖÀà¡£Õı³£ÇÒÈÆĞòÒ»ÖÂµÄÄÚ²¿Á÷ĞÎ±ßÓ¦Âú×ã£º
-	// abCount == 1¡¢baCount == 1¡¢uniqueTotal == 2¡£
-	for (const auto& entry : edge_map_) {
+	// é€šè¿‡ directed_edge_map_ æ”¶é›†æ‰€æœ‰æ— å‘è¾¹
+	auto undirectedEdges = collectUndirectedEdges();
+
+	for (const auto& entry : undirectedEdges) {
 		const UndirectedEdgeIndexKey& key = entry.first;
 		const EdgePair& pair = entry.second;
 
@@ -349,7 +343,6 @@ void Mesh::printEdgeUsageSummary() const {
 		const bool baOwned = !pair.ba || owns(ownedEdges, pair.ba);
 		bool pairBroken = !abOwned || !baOwned;
 
-		// ¶Ô²»ÊÜ Mesh ÓµÓĞµÄÖ¸Õë¾ø²»½âÒıÓÃ£»ÆäÃæÊı°´ 0 ´¦Àí£¬Í¬Ê±±ê¼Ç pairBroken¡£
 		const std::size_t abCount =
 			abOwned ? directedTriangleCount(pair.ab) : 0;
 		const std::size_t baCount =
@@ -360,7 +353,6 @@ void Mesh::printEdgeUsageSummary() const {
 		};
 		const std::size_t uniqueTotal = undirectedTriangleCount(safePair);
 
-		// EdgePair ²ÛÎ»·½Ïò±ØĞëÓë¹æ·¶»¯ key Ò»ÖÂ¡£¼ì²é¶ËµãÇ°ÏÈ¼ì²é¿ÕÖ¸Õë¡£
 		if (abOwned && pair.ab
 			&& (!owns(ownedVertices, pair.ab->from())
 				|| !owns(ownedVertices, pair.ab->to())
@@ -376,7 +368,6 @@ void Mesh::printEdgeUsageSummary() const {
 			pairBroken = true;
 		}
 
-		// Á½¸ö·½ÏòÍ¬Ê±´æÔÚÊ±±ØĞë»¥Îª opposite£»µ¥·½Ïò´æÔÚÊ±±ØĞëÃ»ÓĞ opposite¡£
 		if (abOwned && baOwned && pair.ab && pair.ba) {
 			if (pair.ab->opposite() != pair.ba || pair.ba->opposite() != pair.ab) {
 				pairBroken = true;
@@ -400,8 +391,6 @@ void Mesh::printEdgeUsageSummary() const {
 		}
 		else if (uniqueTotal == 2) {
 			++manifoldCount;
-
-			// Á½¸öÃæ¶¼Ê¹ÓÃÍ¬Ò»·½ÏòÊ±£¬ÍØÆËÈÔÊÇÁ½Ãæ±ß£¬µ«ÃæÈÆĞò²»Ò»ÖÂ¡£
 			if (abCount != 1 || baCount != 1) {
 				++inconsistentOrientationCount;
 			}
@@ -410,7 +399,6 @@ void Mesh::printEdgeUsageSummary() const {
 			++nonManifoldCount;
 		}
 
-		// Summary ²»ÖğÌõ´òÓ¡Õı³£±ß£¬Ö»Êä³öÒì³£±ß£¬±ÜÃâ´óĞÍÍø¸ñ²úÉúº£Á¿ÈÕÖ¾¡£
 		if (pairBroken
 			|| uniqueTotal == 0
 			|| uniqueTotal > 2
@@ -424,7 +412,7 @@ void Mesh::printEdgeUsageSummary() const {
 		}
 	}
 
-	std::cout << "undirected edges: " << edge_map_.size() << '\n';
+	std::cout << "undirected edges: " << undirectedEdges.size() << '\n';
 	std::cout << "empty edges: " << emptyCount << '\n';
 	std::cout << "boundary edges: " << boundaryCount << std::endl;
 	std::cout << "manifold edges: " << manifoldCount << std::endl;
@@ -434,7 +422,7 @@ void Mesh::printEdgeUsageSummary() const {
 	std::cout << "broken edge pairs: " << brokenPairCount << std::endl;
 }
 
-//Á÷ĞÎºÍË®ÃÜ¼ì²é
+//ï¿½ï¿½ï¿½Îºï¿½Ë®ï¿½Ü¼ï¿½ï¿½
 //struct MeshCheckReport {
 //	int boundaryEdgeCount = 0;
 //	int nonManifoldEdgeCount = 0;
@@ -443,17 +431,17 @@ void Mesh::printEdgeUsageSummary() const {
 //	int isolatedVertexCount = 0;
 //	int degenerateTriangleCount = 0;
 //};
-//µÚÒ»²½£º±ß¼¶¼ì²é
+//ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½ï¿½
 void Mesh::checkEdgeManifoldAndBoundary(MeshCheckReport& report) const {
-	//±éÀúÃ¿¸öÎŞÏò±ß
-	//std::cout << edge_map_.size();
-	for (const auto& udeptr : edge_map_) {
-		UndirectedEdgeIndexKey udkey = udeptr.first;
-		int abCount = udeptr.second.ab ? udeptr.second.ab->triangles().size() : 0;
-		int baCount = udeptr.second.ba ? udeptr.second.ba->triangles().size() : 0;
+	// é€šè¿‡ directed_edge_map_ éå†æ‰€æœ‰æ— å‘è¾¹
+	auto undirectedEdges = collectUndirectedEdges();
+	for (const auto& entry : undirectedEdges) {
+		const EdgePair& pair = entry.second;
+		int abCount = pair.ab ? static_cast<int>(pair.ab->triangles().size()) : 0;
+		int baCount = pair.ba ? static_cast<int>(pair.ba->triangles().size()) : 0;
 
-		int totle = abCount + baCount;
-		switch (totle) {
+		int total = abCount + baCount;
+		switch (total) {
 		case 1:
 			report.boundaryEdgeCount++;
 			break;
@@ -463,15 +451,46 @@ void Mesh::checkEdgeManifoldAndBoundary(MeshCheckReport& report) const {
 			break;
 		case 3:
 			report.nonManifoldEdgeCount++;
+			break;
+		}
+	}
+}
+
+//ï¿½Ú¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Ô¼ï¿½ï¿½
+void Mesh::checkOrientationConsistency(MeshCheckReport& report) const {
+	// éå†æ‰€æœ‰ä¸‰è§’å½¢ï¼Œæ£€æŸ¥æ¯æ¡è¾¹çš„æ–¹å‘æ˜¯å¦ä¸é¡¶ç‚¹é¡ºåºä¸€è‡´
+	// æœŸæœ›: edge[0] = v0â†’v1, edge[1] = v1â†’v2, edge[2] = v2â†’v0
+	std::unordered_set<int> inconsistentEdges;
+
+	for (const auto& triptr : triangles_) {
+		const Triangle* tri = triptr.get();
+		if (!tri) continue;
+
+		const Vertex* v0 = tri->vertex(0);
+		const Vertex* v1 = tri->vertex(1);
+		const Vertex* v2 = tri->vertex(2);
+		if (!v0 || !v1 || !v2) continue;
+
+		const Edge* e0 = tri->edge(0);
+		const Edge* e1 = tri->edge(1);
+		const Edge* e2 = tri->edge(2);
+
+		// æ£€æŸ¥ edge[i] çš„æ–¹å‘æ˜¯å¦ä¸é¡¶ç‚¹é¡ºåºåŒ¹é…
+		if (e0 && (e0->from() != v0 || e0->to() != v1)) {
+			inconsistentEdges.insert(e0->index);
+		}
+		if (e1 && (e1->from() != v1 || e1->to() != v2)) {
+			inconsistentEdges.insert(e1->index);
+		}
+		if (e2 && (e2->from() != v2 || e2->to() != v0)) {
+			inconsistentEdges.insert(e2->index);
 		}
 	}
 
+	report.inconsistentOrientationEdgeCount += static_cast<int>(inconsistentEdges.size());
 }
 
-//µÚ¶ş²½£º·½ÏòÒ»ÖÂĞÔ¼ì²é
-void Mesh::checkOrientationConsistency() const {}
-
-//µÚÈı²½£ºÍË»¯Èı½ÇĞÎ¼ì²é
+//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¼ï¿½ï¿½
 void Mesh::checkDegenerateTriangles(MeshCheckReport& report) const {
 	for (const auto& triptr : triangles_) {
 		if (triptr->area < 1e-12)
@@ -479,7 +498,7 @@ void Mesh::checkDegenerateTriangles(MeshCheckReport& report) const {
 	}
 }
 
-//µÚËÄ²½£ºµã¼¶·ÇÁ÷ĞÎ¼ì²é
+//ï¿½ï¿½ï¿½Ä²ï¿½ï¿½ï¿½ï¿½ã¼¶ï¿½ï¿½ï¿½ï¿½ï¿½Î¼ï¿½ï¿½
 void Mesh::checkNonManifoldVertices(MeshCheckReport& report) const {
 	for (const auto& vtptr : vertices_) {
 		const Vertex* v = vtptr.get();
@@ -501,35 +520,7 @@ void Mesh::checkNonManifoldVertices(MeshCheckReport& report) const {
 	}
 
 }
-//ÅĞ¶ÏÁ½¸öÈı½ÇĞÎÊÇ·ñ¹²ÏíÒ»Ìõ°üº¬ center µÄ±ß
-bool Mesh::trianglesShareEdgeAtVertex(const Triangle* t0, const Triangle* t1, const Vertex* center)const {
-	if (!t0 || !t1 || !center) {
-		return false;
-	}
-
-	bool shareCenter = false;
-	bool shareAnotherVertex = false;
-
-	for (int i = 0; i < 3; ++i) {
-		const Vertex* a = t0->vertex(i);
-
-		for (int j = 0; j < 3; ++j) {
-			const Vertex* b = t1->vertex(j);
-
-			if (a == b) {
-				if (a == center) {
-					shareCenter = true;
-				}
-				else {
-					shareAnotherVertex = true;
-				}
-			}
-		}
-	}
-
-	return shareCenter && shareAnotherVertex;
-}
-//¼ì²éµ¥¸ö¶¥µãÊÇ·ñÊÇ·ÇÁ÷ĞÎµã
+//ï¿½ï¿½éµ¥ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½Îµï¿½
 bool Mesh::isNonManifoldVertex(const Vertex* center) const {
 	if (!center) {
 		return false;
@@ -537,13 +528,6 @@ bool Mesh::isNonManifoldVertex(const Vertex* center) const {
 
 	const auto& triSet = center->getNeiTriangles();
 
-	// Ã»ÓĞÈı½ÇĞÎ£¬ÕâÊÇ¹ÂÁ¢µã£¬²»ÔÚÕâÀïÅĞÎª·ÇÁ÷ĞÎ
-	if (triSet.empty()) {
-		return false;
-	}
-
-	// Ö»ÓĞÒ»¸öÈı½ÇĞÎ£¬Ö»ÓĞÒ»¸ö¾Ö²¿ÉÈÇø
-	// ÊÇ·ñÎª±ß½ç£¬ÓÉ±ß½ç±ß¼ì²é¸ºÔğ
 	if (triSet.size() <= 1) {
 		return false;
 	}
@@ -557,24 +541,30 @@ bool Mesh::isNonManifoldVertex(const Vertex* center) const {
 		}
 	}
 
-	std::unordered_set<Triangle*> visited;
+	// å»ºç«‹å±€éƒ¨ edgeâ†’triangles æ˜ å°„ï¼ˆç”¨ vertex index pair åš keyï¼‰
+	// åªå…³æ³¨ç»è¿‡ center çš„è¾¹
+	std::unordered_map<UndirectedEdgeIndexKey, std::vector<Triangle*>, UndirectedEdgeIndexKeyHash> edgeTriMap;
 
+	for (Triangle* tri : incidentTris) {
+		for (int i = 0; i < 3; ++i) {
+			const Vertex* a = tri->vertex(i);
+			const Vertex* b = tri->vertex((i + 1) % 3);
+			// åªè®°å½•åŒ…å« center çš„è¾¹
+			if (a != center && b != center) continue;
+			UndirectedEdgeIndexKey key(a->index, b->index);
+			edgeTriMap[key].push_back(tri);
+		}
+	}
+
+	// BFS éå†è¿é€šåˆ†é‡ï¼šé€šè¿‡å…±äº«è¾¹è¿æ¥ä¸‰è§’å½¢
+	std::unordered_set<Triangle*> visited;
 	int localComponentCount = 0;
 
 	for (Triangle* start : incidentTris) {
-		if (!start) {
-			continue;
-		}
-
-		if (visited.find(start) != visited.end()) {
-			continue;
-		}
+		if (visited.find(start) != visited.end()) continue;
 
 		++localComponentCount;
-
-		if (localComponentCount > 1) {
-			return true;
-		}
+		if (localComponentCount > 1) return true;
 
 		std::queue<Triangle*> q;
 		q.push(start);
@@ -584,18 +574,20 @@ bool Mesh::isNonManifoldVertex(const Vertex* center) const {
 			Triangle* cur = q.front();
 			q.pop();
 
-			for (Triangle* next : incidentTris) {
-				if (!next) {
-					continue;
-				}
+			// éå† cur çš„ä¸‰æ¡è¾¹ï¼Œæ‰¾åˆ°å…±äº«è¾¹çš„é‚»å±…ä¸‰è§’å½¢
+			for (int i = 0; i < 3; ++i) {
+				const Vertex* a = cur->vertex(i);
+				const Vertex* b = cur->vertex((i + 1) % 3);
+				if (a != center && b != center) continue;
 
-				if (visited.find(next) != visited.end()) {
-					continue;
-				}
+				UndirectedEdgeIndexKey key(a->index, b->index);
+				auto it = edgeTriMap.find(key);
+				if (it == edgeTriMap.end()) continue;
 
-				if (trianglesShareEdgeAtVertex(cur, next, center)) {
-					visited.insert(next);
-					q.push(next);
+				for (Triangle* neighbor : it->second) {
+					if (neighbor && visited.insert(neighbor).second) {
+						q.push(neighbor);
+					}
 				}
 			}
 		}
@@ -603,9 +595,12 @@ bool Mesh::isNonManifoldVertex(const Vertex* center) const {
 
 	return false;
 }
-//µÚÁù²½£º»ã×Ü
+//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 MeshCheckReport Mesh::checkManifoldAndWatertight() const {
 	MeshCheckReport report;
 	checkEdgeManifoldAndBoundary(report);
+	checkOrientationConsistency(report);
+	checkDegenerateTriangles(report);
+	checkNonManifoldVertices(report);
 	return report;
 }

@@ -1,8 +1,8 @@
 /*****************************************************************//**
  * \file   mesh.hxx
- * \brief  Mesh ÊÇÎ¨Ò»ËùÓĞÕß¡£
- *         vertices_ / edges_ / triangles_ ¸ºÔğÉúÃüÖÜÆÚ£»
- *         map Ö»×öË÷Òı£¬²»¸ºÔğÊÍ·Å¡£
+ * \brief  Mesh ï¿½ï¿½Î¨Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ß¡ï¿½
+ *         vertices_ / edges_ / triangles_ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú£ï¿½
+ *         map Ö»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í·Å¡ï¿½
  * \author zzm
  * \date   June 2026
  *********************************************************************/
@@ -10,6 +10,8 @@
 #include "point.hxx"
 #include "triangle.hxx"
 #include "edge.hxx"
+#include "mat4.hxx"
+#include "quat.hxx"
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -34,7 +36,7 @@ inline int parseObjVertexIndex(const std::string& token) {
 
 	return std::stoi(indexStr);
 }
-//ÓĞÏò±ßequalºÍhash
+//ï¿½ï¿½ï¿½ï¿½ï¿½equalï¿½ï¿½hash
 struct DirectedEdgeIndexKey {
 	int from = -1;
 	int to = -1;
@@ -52,7 +54,7 @@ struct DirectedEdgeIndexKeyHash {
 		return h0 ^ (h1 + 0x9e3779b9 + (h0 << 6) + (h0 >> 2));
 	}
 };
-//ÎŞÏò±ßequalºÍhash
+//ï¿½ï¿½ï¿½ï¿½ï¿½equalï¿½ï¿½hash
 struct UndirectedEdgeIndexKey {
 	int a = -1;
 	int b = -1;
@@ -79,8 +81,8 @@ struct EdgePair {
 	Edge* ba = nullptr;
 };
 
-//µ¼Èë¼ì²é±¨¸æ
-//¹¹½¨³öÀ´µÄ Mesh ÓĞÃ»ÓĞ×ÔÏàÃ¬¶Ü
+//ï¿½ï¿½ï¿½ï¿½ï¿½é±¨ï¿½ï¿½
+//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Mesh ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¬ï¿½ï¿½
 struct MeshValidationReport {
 	std::vector<int> invalidVertexIndices;
 	std::vector<int> invalidTriangleIndices;
@@ -97,11 +99,11 @@ struct MeshValidationReport {
 	}
 };
 /**
- *  ÓĞ¶´£¿
- *  ÓĞ·ÇÁ÷ĞÎ±ß£¿
- *  ÓĞ·ÇÁ÷ĞÎµã£¿
- *  Ãæ·½Ïò²»Ò»ÖÂ£¿
- *  ÓĞÍË»¯Èı½ÇĞÎ£¿.
+ *  ï¿½Ğ¶ï¿½ï¿½ï¿½
+ *  ï¿½Ğ·ï¿½ï¿½ï¿½ï¿½Î±ß£ï¿½
+ *  ï¿½Ğ·ï¿½ï¿½ï¿½ï¿½Îµã£¿
+ *  ï¿½æ·½ï¿½ï¿½Ò»ï¿½Â£ï¿½
+ *  ï¿½ï¿½ï¿½Ë»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î£ï¿½.
  */
 struct MeshCheckReport {
 	int boundaryEdgeCount = 0;
@@ -113,11 +115,15 @@ struct MeshCheckReport {
 };
 class Mesh {
 private:
-	std::vector<std::unique_ptr<Vertex>> vertices_;//²»ĞèÒªequalºÍhash£¬Ö»ÓĞµã
-	std::vector<std::unique_ptr<Edge>> edges_;//²»È¥ÖØ£¬ÓĞÏò±ß
-	std::vector<std::unique_ptr<Triangle>> triangles_;//Èı½ÇÃæÆ¬£¬²»ĞèÒªÈ¥ÖØ
+	std::vector<std::unique_ptr<Vertex>> vertices_;
+	std::vector<std::unique_ptr<Edge>> edges_;
+	std::vector<std::unique_ptr<Triangle>> triangles_;
 	std::unordered_map<DirectedEdgeIndexKey, Edge*, DirectedEdgeIndexKeyHash> directed_edge_map_;
-	std::unordered_map<UndirectedEdgeIndexKey, EdgePair, UndirectedEdgeIndexKeyHash> edge_map_;
+
+	// OBJ è§£ææ—¶å­˜å‚¨æ³•çº¿å’Œçº¹ç†åæ ‡
+	std::vector<std::array<double, 3>> normals_;
+	std::vector<std::array<double, 2>> texCoords_;
+	std::vector<std::string> parseErrors_;
 
 
 public:
@@ -128,82 +134,119 @@ public:
 	Mesh& operator=(Mesh&&) noexcept = default;
 
 	Mesh() = default;
-	// Â·¾¶¹¹Ôì
-	Mesh(std::string filePath) {
+	// OBJ æ–‡ä»¶åŠ è½½
+	Mesh(const std::string& filePath) {
 		std::ifstream input(filePath);
 
 		if (!input.is_open()) {
 			throw std::runtime_error("Failed to open obj file: " + filePath);
 		}
+
+		int lineNumber = 0;
 		std::string line;
 
 		while (std::getline(input, line)) {
-			if (line.empty()) {
-				continue;
-			}
-
-			if (line[0] == '#') {
-				continue;
-			}
+			++lineNumber;
+			if (line.empty()) continue;
+			if (line[0] == '#') continue;
 
 			std::istringstream iss(line);
-
 			std::string type;
 			iss >> type;
 
 			if (type == "v") {
 				double x, y, z;
-
 				if (!(iss >> x >> y >> z)) {
-					std::cout << "Invalid vertex line: " << line << std::endl;
+					parseErrors_.push_back("Line " + std::to_string(lineNumber) + ": invalid vertex");
 					continue;
 				}
-
 				addVertex(x, y, z);
+			}
+			else if (type == "vn") {
+				double nx, ny, nz;
+				if (!(iss >> nx >> ny >> nz)) {
+					parseErrors_.push_back("Line " + std::to_string(lineNumber) + ": invalid normal");
+					continue;
+				}
+				normals_.push_back({nx, ny, nz});
+			}
+			else if (type == "vt") {
+				double u, v;
+				if (!(iss >> u >> v)) {
+					parseErrors_.push_back("Line " + std::to_string(lineNumber) + ": invalid texcoord");
+					continue;
+				}
+				texCoords_.push_back({u, v});
 			}
 			else if (type == "f") {
 				std::vector<int> indices;
-
 				std::string token;
+
 				while (iss >> token) {
 					try {
 						int objIndex = parseObjVertexIndex(token);
-
-						// OBJ ¶¥µãË÷Òı´Ó 1 ¿ªÊ¼£¬Mesh ÄÚ²¿ index ´Ó 0 ¿ªÊ¼
 						indices.push_back(objIndex - 1);
 					}
-					catch (...) {
-						std::cout << "Invalid face token: " << token << std::endl;
+					catch (const std::exception& e) {
+						parseErrors_.push_back("Line " + std::to_string(lineNumber)
+							+ ": invalid face token '" + token + "': " + e.what());
 					}
 				}
 
 				if (indices.size() < 3) {
-					std::cout << "Invalid face line: " << line << std::endl;
+					parseErrors_.push_back("Line " + std::to_string(lineNumber)
+						+ ": face has fewer than 3 vertices");
 					continue;
 				}
 
-				// Èç¹ûÊÇÈı½ÇĞÎ
+				// æ£€æŸ¥ç´¢å¼•èŒƒå›´
+				bool validRange = true;
+				for (int idx : indices) {
+					if (idx < 0 || idx >= static_cast<int>(vertices_.size())) {
+						parseErrors_.push_back("Line " + std::to_string(lineNumber)
+							+ ": vertex index " + std::to_string(idx + 1) + " out of range");
+						validRange = false;
+						break;
+					}
+				}
+				if (!validRange) continue;
+
+				// ä¸‰è§’å½¢ï¼šç›´æ¥æ·»åŠ 
 				if (indices.size() == 3) {
 					addTriangle(indices[0], indices[1], indices[2]);
 				}
 				else {
-					// Èç¹ûÊÇËÄ±ßĞÎ»ò¶à±ßĞÎ£¬Ê¹ÓÃÉÈĞÎÆÊ·Ö
-					// f v0 v1 v2 v3 -> (v0,v1,v2), (v0,v2,v3)
+					// å¤šè¾¹å½¢ï¼šæ‰‡å½¢ä¸‰è§’åŒ–ï¼ˆé€‚ç”¨äºå‡¸å¤šè¾¹å½¢ï¼‰
 					for (std::size_t i = 1; i + 1 < indices.size(); ++i) {
 						addTriangle(indices[0], indices[i], indices[i + 1]);
 					}
 				}
 			}
+			// å¿½ç•¥å…¶ä»–è¡Œï¼ˆo, g, s, mtllib, usemtl ç­‰ï¼‰
 		}
-
 	}
-	// µã¼ÓÈëvertices_
+
+	// è·å–è§£æé”™è¯¯
+	const std::vector<std::string>& parseErrors() const noexcept {
+		return parseErrors_;
+	}
+
+	// è·å–æ³•çº¿æ•°æ®
+	const std::vector<std::array<double, 3>>& normals() const noexcept {
+		return normals_;
+	}
+
+	// è·å–çº¹ç†åæ ‡æ•°æ®
+	const std::vector<std::array<double, 2>>& texCoords() const noexcept {
+		return texCoords_;
+	}
+	// ï¿½ï¿½ï¿½ï¿½ï¿½vertices_
 	Vertex* addVertex(double x, double y, double z) {
 		int idx = static_cast<int>(vertices_.size());
 		vertices_.push_back(std::make_unique<Vertex>(idx, x, y, z));
 		return vertices_.back().get();
 	}
-	// Í¨¹ıË÷Òı·µ»Øµã
+	// Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Øµï¿½
 	Vertex* findByIndex(int idx) {
 		if (idx < 0 || idx >= static_cast<int>(vertices_.size())) {
 			return nullptr;
@@ -216,22 +259,47 @@ public:
 		}
 		return vertices_[idx].get();
 	}
-	//Í¨¹ıµãÑ°ÕÒ±ß
-	//ÕÒµ½·µ»Ø£¬Ã»ÕÒµ½¼ÓÈë²¢·µ»Ø
+	// é€šè¿‡ä¸¤ä¸ªé¡¶ç‚¹ç´¢å¼•è·å–æ— å‘è¾¹å¯¹ï¼ˆä» directed_edge_map_ ä¸­æŸ¥æ‰¾ï¼‰
+	EdgePair getUndirectedEdgePair(int i0, int i1) const {
+		EdgePair pair;
+		auto it_ab = directed_edge_map_.find(DirectedEdgeIndexKey(i0, i1));
+		if (it_ab != directed_edge_map_.end()) pair.ab = it_ab->second;
+		auto it_ba = directed_edge_map_.find(DirectedEdgeIndexKey(i1, i0));
+		if (it_ba != directed_edge_map_.end()) pair.ba = it_ba->second;
+		return pair;
+	}
+
+	// æ”¶é›†æ‰€æœ‰å”¯ä¸€çš„æ— å‘è¾¹å¯¹ï¼ˆç”¨äºéå†æ— å‘è¾¹ï¼‰
+	std::vector<std::pair<UndirectedEdgeIndexKey, EdgePair>> collectUndirectedEdges() const {
+		std::unordered_set<UndirectedEdgeIndexKey, UndirectedEdgeIndexKeyHash> seen;
+		std::vector<std::pair<UndirectedEdgeIndexKey, EdgePair>> result;
+		for (const auto& entry : directed_edge_map_) {
+			const Edge* e = entry.second;
+			if (!e || !e->from() || !e->to()) continue;
+			UndirectedEdgeIndexKey ukey(e->from()->index, e->to()->index);
+			if (seen.insert(ukey).second) {
+				result.emplace_back(ukey, getUndirectedEdgePair(ukey.a, ukey.b));
+			}
+		}
+		return result;
+	}
+
+	//Í¨ï¿½ï¿½ï¿½ï¿½Ñ°ï¿½Ò±ï¿½
+	//ï¿½Òµï¿½ï¿½ï¿½ï¿½Ø£ï¿½Ã»ï¿½Òµï¿½ï¿½ï¿½ï¿½ë²¢ï¿½ï¿½ï¿½ï¿½
 	Edge* findOrAddEdge(Vertex* v0, Vertex* v1) {
 		if (!v0 || !v1) { return nullptr; }
 		if (v0 == v1) { return nullptr; }
 
-		// ´¦ÀíÓĞÏò±ß
-		// ´«ÈëµÄÕıÏò±ß
-		// ¹¹ÔìÕıÏò±ßË÷Òı
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		DirectedEdgeIndexKey dkey(v0->index, v1->index);
-		// ²éÕÒ²¢·µ»Ø
+		// ï¿½ï¿½ï¿½Ò²ï¿½ï¿½ï¿½ï¿½ï¿½
 		auto dit = directed_edge_map_.find(dkey);
 		if (dit != directed_edge_map_.end()) {
 			return dit->second;
 		}
-		// Ã»ÓĞÔò¹¹Ôì£¬×¼±¸²åÈë
+		// Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ì£¬×¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		int idx = static_cast<int>(edges_.size());
 		auto edge = std::make_unique<Edge>(idx, v0, v1);
 		Edge* raw = edge.get();
@@ -240,36 +308,23 @@ public:
 
 
 
-		// ´¦ÀíÓĞÏò±ß
-		// ´«ÈëµÄ·´Ïò±ß
-		// ¹¹Ôì·´Ïò±ßË÷Òı
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		// ï¿½ï¿½ï¿½ï¿½Ä·ï¿½ï¿½ï¿½ï¿½
+		// ï¿½ï¿½ï¿½ì·´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		DirectedEdgeIndexKey reverse_key(v1->index, v0->index);
-		// ²éÕÒ²¢·µ»Ø
+		// ï¿½ï¿½ï¿½Ò²ï¿½ï¿½ï¿½ï¿½ï¿½
 		auto rit = directed_edge_map_.find(reverse_key);
 		if (rit != directed_edge_map_.end()) {
 			Edge* opposite = rit->second;
-			// Èç¹ûÄãµÄ Edge ÀàÖ§³Ö opposite£¬¿ÉÒÔ´ò¿ªÕâÁ½¾ä
+			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Edge ï¿½ï¿½Ö§ï¿½ï¿½ oppositeï¿½ï¿½ï¿½ï¿½ï¿½Ô´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 			raw->setOpposite(opposite);
 			//opposite->setOpposite(raw);
 		}
 
-		// ÓĞÏò±ß£¨Îª´«ÈëµÄÕıÏò±ß£©²åÈëedges_
+		// ï¿½ï¿½ï¿½ï¿½ß£ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½ï¿½ï¿½ï¿½ï¿½edges_
 		edges_.push_back(std::move(edge));
-		// ÓĞÏò±ß£¨Îª´«ÈëµÄÕıÏò±ß£©²åÈëdirected_edge_map_
+		// ï¿½ï¿½ï¿½ï¿½ß£ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½ï¿½ï¿½ï¿½ï¿½directed_edge_map_
 		directed_edge_map_.emplace(dkey, raw);
-
-		// ÎŞÏò±ß´¦Àí
-		// ¹¹ÔìÎŞÏò±ßË÷Òı
-		UndirectedEdgeIndexKey ukey(v0->index, v1->index);
-		// ¹¹ÔìÎŞÏò±ß¶ÔÏó£¨°üº¬Õı·´2Ìõ±ßµÄ½á¹¹Ìå£©
-		EdgePair& pair = edge_map_[ukey];
-
-		if (v0->index == ukey.a && v1->index == ukey.b) {
-			pair.ab = raw;
-		}
-		else {
-			pair.ba = raw;
-		}
 
 		v0->addNeiVertex(v1);
 		v1->addNeiVertex(v0);
@@ -280,7 +335,7 @@ public:
 		return raw;
 	}
 	Triangle* addTriangle(int firstIdx, int secondIdx, int thirdIdx) {
-		// »ñÈ¡µã
+		// ï¿½ï¿½È¡ï¿½ï¿½
 		Vertex* firstVertex = findByIndex(firstIdx);
 		Vertex* secondVertex = findByIndex(secondIdx);
 		Vertex* thirdVertex = findByIndex(thirdIdx);
@@ -292,10 +347,9 @@ public:
 			thirdVertex == firstVertex) {
 			return nullptr;
 		}
-		// µã¼ÓÈëµã
-		// ±ß¼ÓÈëµã
-		// ÓĞÏò±ß¼ÓÈëedges_
-		// ÎŞÏò±ß¼ÓÈëedge_map_
+		// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		// ï¿½ß¼ï¿½ï¿½ï¿½ï¿½
+		// ï¿½ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½edges_
 		Edge* edge_1 = findOrAddEdge(firstVertex, secondVertex);
 		Edge* edge_2 = findOrAddEdge(secondVertex, thirdVertex);
 		Edge* edge_3 = findOrAddEdge(thirdVertex, firstVertex);
@@ -305,24 +359,24 @@ public:
 		if (!edge_1 || !edge_2 || !edge_3) {
 			return nullptr;
 		}
-		//´¦ÀíÈı½ÇĞÎ
+		//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		int triIndex = triangles_.size();
 		std::unique_ptr<Triangle> tri = std::make_unique<Triangle>(triIndex, firstVertex, secondVertex, thirdVertex);
 		Triangle* raw = tri.get();
 		if (raw->area < 1e-12) {
 			return nullptr;
 		}
-		//Èı½ÇĞÎ¼ÓÈëtriangles_
+		//ï¿½ï¿½ï¿½ï¿½ï¿½Î¼ï¿½ï¿½ï¿½triangles_
 		triangles_.push_back(std::move(tri));
-		//Èı½ÇĞÎ¼ÓÈëµã
+		//ï¿½ï¿½ï¿½ï¿½ï¿½Î¼ï¿½ï¿½ï¿½ï¿½
 		firstVertex->addNeiTri(raw);
 		secondVertex->addNeiTri(raw);
 		thirdVertex->addNeiTri(raw);
-		//Èı½ÇĞÎ¼ÓÈë±ß
+		//ï¿½ï¿½ï¿½ï¿½ï¿½Î¼ï¿½ï¿½ï¿½ï¿½
 		edge_1->addTriangle(raw);
 		edge_2->addTriangle(raw);
 		edge_3->addTriangle(raw);
-		//±ß¼ÓÈëÈı½ÇĞÎ
+		//ï¿½ß¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		raw->setEdges(edge_1, edge_2, edge_3);
 		return raw;
 	}
@@ -337,15 +391,15 @@ public:
 		return triangles_.size();
 	}
 
-	//Á¬Í¨ĞÔÅĞ¶¨
-	//Í¨¹ıµã±ßÅĞ¶¨
+	//ï¿½ï¿½Í¨ï¿½ï¿½ï¿½Ğ¶ï¿½
+	//Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ğ¶ï¿½
 	std::vector<std::vector<Vertex*>> connectedVertexComponents() const {
 		std::vector<std::vector<Vertex*>> components;
 		std::unordered_set<Vertex*> visited;
 		for (const std::unique_ptr<Vertex>& vptr : vertices_) {
 			Vertex* start = vptr.get();
 
-			// µãÎª¿Õ»òÕßµãÒÑ¾­±»·ÃÎÊ Ôò½øĞĞÏÂÒ»¸öµãµÄ²éÑ¯
+			// ï¿½ï¿½Îªï¿½Õ»ï¿½ï¿½ßµï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Ä²ï¿½Ñ¯
 			if (!start) continue;
 			if (visited.find(start) != visited.end()) continue;
 
@@ -356,14 +410,14 @@ public:
 			q.push(start);
 
 			while (!q.empty()) {
-				//»ñÈ¡¶ÓÁĞµÚÒ»¸ö²¢µ¯³ö
+				//ï¿½ï¿½È¡ï¿½ï¿½ï¿½Ğµï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 				Vertex* cur = q.front();
 				q.pop();
 				component.push_back(cur);
 
-				//±éÀúµ¯³öµãµÄÁÚ¾Óµã
+				//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¾Óµï¿½
 				for (Vertex* nei : cur->getNeiVertics()) {
-					// ÅĞ¶ÏµãÊÇ·ñÎª¿ÕºÍ·ÃÎÊ¹ı
+					// ï¿½Ğ¶Ïµï¿½ï¿½Ç·ï¿½Îªï¿½ÕºÍ·ï¿½ï¿½Ê¹ï¿½
 					if (!nei) continue;
 					if (visited.find(nei) != visited.end()) continue;
 
@@ -377,7 +431,7 @@ public:
 		return components;
 
 	}
-	//Í¨¹ıµã¼¯»ñÈ¡Ã¿¸öÁ¬Í¨·ÖÁ¿µÄÃæ¼¯
+	//Í¨ï¿½ï¿½ï¿½ã¼¯ï¿½ï¿½È¡Ã¿ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ¼¯
 	std::vector<Triangle*> collectTriangleFromVertexComponent(const std::vector<Vertex*>& component) {
 		std::unordered_set<Triangle*> triSet;
 		for (Vertex* vt : component) {
@@ -389,26 +443,26 @@ public:
 		}
 		return std::vector<Triangle*>(triSet.begin(), triSet.end());
 	}
-	//»ùÓÚµã¼¯½øĞĞ·Ö¸î
+	//ï¿½ï¿½ï¿½Úµã¼¯ï¿½ï¿½ï¿½Ğ·Ö¸ï¿½
 	std::vector<Mesh> splitComponents() {
 		std::vector<Mesh> results;
-		//»ñÈ¡Á¬Í¨·ÖÁ¿
+		//ï¿½ï¿½È¡ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½
 		std::vector<std::vector<Vertex*>> components = connectedVertexComponents();
-		//½«Ã¿¸öÁ¬Í¨·ÖÁ¿½øĞĞ´¦ÀíºÍÍêÉÆ
+		//ï¿½ï¿½Ã¿ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ğ´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		for (std::vector<Vertex*> component : components) {
 			Mesh subMesh;
 			std::unordered_map<Vertex*, int> oldToNewIndex;
 
-			//´¦Àíµã£¬¸´ÓÃÖ®Ç°µÄ£¬Ïàµ±ÓÚµ¼Èë
+			//ï¿½ï¿½ï¿½ï¿½ï¿½ã£¬ï¿½ï¿½ï¿½ï¿½Ö®Ç°ï¿½Ä£ï¿½ï¿½àµ±ï¿½Úµï¿½ï¿½ï¿½
 			for (Vertex* oldVertex : component) {
 				Vertex* newVertex = subMesh.addVertex(oldVertex->x, oldVertex->y, oldVertex->z);
-				//¾Éµã-ĞÂË÷Òı
+				//ï¿½Éµï¿½-ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 				oldToNewIndex[oldVertex] = newVertex->index;
 			}
-			//´¦ÀíÃæ£¬¸´ÓÃÖ®Ç°µÄ£¬Ïàµ±ÓÚµ¼Èë
+			//ï¿½ï¿½ï¿½ï¿½ï¿½æ£¬ï¿½ï¿½ï¿½ï¿½Ö®Ç°ï¿½Ä£ï¿½ï¿½àµ±ï¿½Úµï¿½ï¿½ï¿½
 			std::vector<Triangle*> tris = collectTriangleFromVertexComponent(component);
 			for (Triangle* oldTri : tris) {
-				//»ñÈ¡¾Éµã
+				//ï¿½ï¿½È¡ï¿½Éµï¿½
 				Vertex* ov0 = oldTri->vertex(0);
 				Vertex* ov1 = oldTri->vertex(1);
 				Vertex* ov2 = oldTri->vertex(2);
@@ -416,7 +470,7 @@ public:
 				if (!ov0 || !ov1 || !ov2) {
 					continue;
 				}
-				//»ñÈ¡¾Éµã-ĞÂË÷Òı¶Ô
+				//ï¿½ï¿½È¡ï¿½Éµï¿½-ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 				std::unordered_map<Vertex*, int>::iterator it0 = oldToNewIndex.find(ov0);
 				std::unordered_map<Vertex*, int>::iterator it1 = oldToNewIndex.find(ov1);
 				std::unordered_map<Vertex*, int>::iterator it2 = oldToNewIndex.find(ov2);
@@ -426,7 +480,7 @@ public:
 					it2 == oldToNewIndex.end()) {
 					continue;
 				}
-				//ÒÀÀµĞÂµãµÄÈı¸öindex
+				//ï¿½ï¿½ï¿½ï¿½ï¿½Âµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½index
 				subMesh.addTriangle(it0->second, it1->second, it2->second);
 			}
 			results.push_back(std::move(subMesh));
@@ -434,7 +488,7 @@ public:
 		return results;
 	}
 
-	//Í¨¹ı±ßÃæÅĞ¶¨
+	//Í¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ğ¶ï¿½
 	std::vector<std::vector<Triangle*>> connectedTriangleComponents() const {
 		std::vector<std::vector<Triangle*>> components;
 		std::unordered_set<Triangle*> visited;
@@ -474,10 +528,10 @@ public:
 						}
 						};
 
-					// ¼æÈİÍ¬·½Ïò¹²±ßµÄÇé¿ö¡£
+					// ï¿½ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ï¿½ò¹²±ßµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 					enqueueTriangles(edge->triangles());
 
-					// Õı³£ÈÆĞòÏÂ£¬ÏàÁÚÃæÎ»ÓÚ·´Ïò±ß¡£
+					// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½Ú·ï¿½ï¿½ï¿½ß¡ï¿½
 					Edge* opposite = edge->opposite();
 					if (opposite) {
 						enqueueTriangles(opposite->triangles());
@@ -497,7 +551,7 @@ public:
 
 
 
-	//µ¼³ö·½·¨
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	bool exportObj(const std::string& filePath) const {
 		std::ofstream output(filePath);
 
@@ -514,7 +568,7 @@ public:
 
 		output << std::fixed << std::setprecision(10);
 
-		// 1. Ğ´³ö¶¥µã
+		// 1. Ğ´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		for (std::size_t i = 0; i < vertices_.size(); ++i) {
 			const Vertex* v = vertices_[i].get();
 
@@ -533,7 +587,7 @@ public:
 
 		output << "\n";
 
-		// 2. Ğ´³öÈı½ÇÃæ
+		// 2. Ğ´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		for (const auto& triPtr : triangles_) {
 			const Triangle* tri = triPtr.get();
 
@@ -568,31 +622,78 @@ public:
 		return true;
 	}
 
-	//ÍØÆË¼ì²é±¨¸æ
+	//ï¿½ï¿½ï¿½Ë¼ï¿½é±¨ï¿½ï¿½
 	MeshValidationReport validateBasicTopology(double eps = 1e-12) const;
 	std::size_t directedTriangleCount(const Edge* e) const;
 	std::size_t undirectedTriangleCount(const EdgePair& pair) const;
 	void printEdgeUsageSummary() const;
 
-	//Á÷ĞÎºÍË®ÃÜ¼ì²é
-	//µÚÒ»²½£º±ß¼¶¼ì²é
+	//ï¿½ï¿½ï¿½Îºï¿½Ë®ï¿½Ü¼ï¿½ï¿½
+	//ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½ï¿½
 	void checkEdgeManifoldAndBoundary(MeshCheckReport& report) const;
 
-	//µÚ¶ş²½£º·½ÏòÒ»ÖÂĞÔ¼ì²é
-	void checkOrientationConsistency() const;
+	//ï¿½Ú¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Ô¼ï¿½ï¿½
+	void checkOrientationConsistency(MeshCheckReport& report) const;
 
-	//µÚÈı²½£ºÍË»¯Èı½ÇĞÎ¼ì²é
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î¼ï¿½ï¿½
 	void checkDegenerateTriangles(MeshCheckReport& report) const;
 
-	//µÚËÄ²½£ºµã¼¶·ÇÁ÷ĞÎ¼ì²é
+	//ï¿½ï¿½ï¿½Ä²ï¿½ï¿½ï¿½ï¿½ã¼¶ï¿½ï¿½ï¿½ï¿½ï¿½Î¼ï¿½ï¿½
 	void checkNonManifoldVertices(MeshCheckReport& report) const;
-	//ÅĞ¶ÏÁ½¸öÈı½ÇĞÎÊÇ·ñ¹²ÏíÒ»Ìõ°üº¬ center µÄ±ß
-	bool trianglesShareEdgeAtVertex(const Triangle* t0, const Triangle* t1, const Vertex* center) const;
-	//¼ì²éµ¥¸ö¶¥µãÊÇ·ñÊÇ·ÇÁ÷ĞÎµã
+	//ï¿½ï¿½éµ¥ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½Îµï¿½
 	bool isNonManifoldVertex(const Vertex* center) const;
-	//µÚÁù²½£º»ã×Ü
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	MeshCheckReport checkManifoldAndWatertight() const;
 
+	// ===== å§¿æ€å˜æ¢ =====
+
+	// å¯¹æ‰€æœ‰é¡¶ç‚¹åº”ç”¨ 4Ã—4 å˜æ¢çŸ©é˜µï¼Œè‡ªåŠ¨é‡ç®—æ³•çº¿å’Œé¢ç§¯
+	void transform(const Mat4& mat) {
+		for (auto& vptr : vertices_) {
+			if (!vptr) continue;
+			Vec3 pos = mat.transformPoint(Vec3(vptr->x, vptr->y, vptr->z));
+			vptr->x = pos.x;
+			vptr->y = pos.y;
+			vptr->z = pos.z;
+		}
+		// é‡ç®—æ‰€æœ‰ä¸‰è§’å½¢æ³•çº¿å’Œé¢ç§¯
+		for (auto& triptr : triangles_) {
+			if (triptr) triptr->computeNormalAndArea();
+		}
+	}
+
+	// å¹³ç§»
+	void translate(const Vec3& offset) {
+		transform(Mat4::translation(offset));
+	}
+
+	void translate(double dx, double dy, double dz) {
+		transform(Mat4::translation(dx, dy, dz));
+	}
+
+	// ç”¨å››å…ƒæ•°æ—‹è½¬
+	void rotate(const Quat& q) {
+		transform(q.toMat4());
+	}
+
+	// ç»•è½´æ—‹è½¬
+	void rotate(const Vec3& axis, double radians) {
+		transform(Mat4::rotationAxis(axis, radians));
+	}
+
+	// æ¬§æ‹‰è§’æ—‹è½¬ï¼ˆXYZ å†…æ—‹ï¼Œå¼§åº¦ï¼‰
+	void rotateEuler(double pitch, double yaw, double roll) {
+		transform(Quat::fromEuler(pitch, yaw, roll).toMat4());
+	}
+
+	// ç¼©æ”¾
+	void scale(double sx, double sy, double sz) {
+		transform(Mat4::scaling(sx, sy, sz));
+	}
+
+	void scale(double s) {
+		transform(Mat4::scaling(s));
+	}
 
 };
 

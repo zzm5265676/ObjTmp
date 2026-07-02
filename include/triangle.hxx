@@ -1,9 +1,9 @@
 /*****************************************************************//**
  * \file   triangle.hxx
- * \brief  Triangle ÊÇÒ»¸öÓÐ·½ÏòµÄÈý½ÇÃæ¡£
- *         edges_[0] Ó¦¸Ã¶ÔÓ¦ vertex(0) -> vertex(1)
- *         edges_[1] Ó¦¸Ã¶ÔÓ¦ vertex(1) -> vertex(2)
- *         edges_[2] Ó¦¸Ã¶ÔÓ¦ vertex(2) -> vertex(0)
+ * \brief  Triangle ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Ð·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ¡£
+ *         edges_[0] Ó¦ï¿½Ã¶ï¿½Ó¦ vertex(0) -> vertex(1)
+ *         edges_[1] Ó¦ï¿½Ã¶ï¿½Ó¦ vertex(1) -> vertex(2)
+ *         edges_[2] Ó¦ï¿½Ã¶ï¿½Ó¦ vertex(2) -> vertex(0)
  * \author zzm
  * \date   June 2026
  *********************************************************************/
@@ -13,6 +13,7 @@
 #include "vertex.hxx"
 #include <memory>
 #include <array>
+#include <stdexcept>
 class Edge;
 
 class Triangle {
@@ -55,7 +56,7 @@ public:
 
 		normal_ = e1.cross(e2);
 
-		double len = normal_.length();
+		double len = normal_.cachedLength();
 
 		area = 0.5 * len;
 
@@ -79,18 +80,21 @@ public:
 	Vertex* v2() const noexcept { return vertices_[2]; }
 
 	void setEdge(int i, Edge* e) {
+		if (i < 0 || i > 2) throw std::out_of_range("Triangle edge index out of range [0,2]");
 		edges_[i] = e;
 	}
 	void setEdges(Edge* e0, Edge* e1, Edge* e2) {
-		if (!edges_[0])setEdge(0, e0);
-		if (!edges_[1])setEdge(1, e1);
-		if (!edges_[2])setEdge(2, e2);
+		edges_[0] = e0;
+		edges_[1] = e1;
+		edges_[2] = e2;
 	}
-	Edge* edge(int i) const noexcept {
+	Edge* edge(int i) const {
+		if (i < 0 || i > 2) throw std::out_of_range("Triangle edge index out of range [0,2]");
 		return edges_[i];
 	}
 
-	Vertex* vertex(int i) const noexcept {
+	Vertex* vertex(int i) const {
+		if (i < 0 || i > 2) throw std::out_of_range("Triangle vertex index out of range [0,2]");
 		return vertices_[i];
 	}
 

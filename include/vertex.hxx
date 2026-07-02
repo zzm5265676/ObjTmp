@@ -1,77 +1,74 @@
-/*****************************************************************//**
- * \file   vertex.hxx
- * \brief  Vertex 是点对象，同时记录邻接关系。
- *		   Vertex 不拥有 Edge / Triangle；
- *         Vertex 只是记录拓扑连接。
- * \author zzm
- * \date   June 2026
- *********************************************************************/
 #pragma once
 #include "point.hxx"
 #include "vec3.hxx"
-#include <unordered_set>
+#include <vector>
+#include <algorithm>
 
 class Edge;
 class Triangle;
 
 class Vertex : public Point {
 private:
-	std::unordered_set<Vertex*> neivts;
-	std::unordered_set<Edge*> neiedges;
-	std::unordered_set<Triangle*> neitris;
+	std::vector<Vertex*> neivts;
+	std::vector<Edge*> neiedges;
+	std::vector<Triangle*> neitris;
+
 public:
 	int index = -1;
 
 	Vertex() = default;
-	Vertex(int idx, double x_, double y_, double z_) {
-		this->index = idx;
-		this->x = x_;
-		this->y = y_;
-		this->z = z_;
+	Vertex(int idx, double x_, double y_, double z_)
+		: Point(x_, y_, z_), index(idx) {
 	}
-	Vertex(int idx, Point* pt) {
-		this->y = pt->y;
-		this->z = pt->z;
-		this->x = pt->x;
-		this->index = idx;
+
+	Vertex(int idx, Point* pt)
+		: Point(*pt), index(idx) {
 	}
-	Vertex(Vertex* vt) {
-		this->x = vt->x;
-		this->y = vt->y;
-		this->z = vt->z;
+
+	Vertex(Vertex* vt)
+		: Point(*vt) {
 	}
+
 	void initIndex(int idx) {
 		index = idx;
 	}
 
 	bool addNeiVertex(Vertex* vt) {
-		if (!vt) return false;
-		return neivts.insert(vt).second;
+		if (!vt || vt == this) return false;
+		for (Vertex* v : neivts) {
+			if (v == vt) return false;
+		}
+		neivts.push_back(vt);
+		return true;
 	}
 
 	bool addNeiEdge(Edge* edge) {
 		if (!edge) return false;
-		return neiedges.insert(edge).second;
+		for (Edge* e : neiedges) {
+			if (e == edge) return false;
+		}
+		neiedges.push_back(edge);
+		return true;
 	}
 
 	bool addNeiTri(Triangle* tri) {
 		if (!tri) return false;
-		return neitris.insert(tri).second;
+		for (Triangle* t : neitris) {
+			if (t == tri) return false;
+		}
+		neitris.push_back(tri);
+		return true;
 	}
 
-	struct EdgeEqualByVertexIndex {
-		bool operator()(const Edge* a, const Edge* b) const noexcept;
-	};
-
-	const std::unordered_set<Vertex*>& getNeiVertics() const noexcept {
+	const std::vector<Vertex*>& getNeiVertics() const noexcept {
 		return neivts;
 	}
 
-	const std::unordered_set<Edge*>& getNeiEdges() const noexcept {
+	const std::vector<Edge*>& getNeiEdges() const noexcept {
 		return neiedges;
 	}
 
-	const std::unordered_set<Triangle*>& getNeiTriangles() const noexcept {
+	const std::vector<Triangle*>& getNeiTriangles() const noexcept {
 		return neitris;
 	}
 };
