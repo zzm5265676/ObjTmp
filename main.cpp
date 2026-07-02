@@ -312,7 +312,55 @@ int main() {
 		auto a = mesh_creation::api_make_box(2, 2, 2);
 		auto b = mesh_creation::api_make_box(2, 2, 2);
 		b.translate(1, 0, 0);
+
+		// Debug: check intersection
+		geo::BVH bvhA(a), bvhB(b);
+		auto intResult = mesh_intersect::findIntersection(a, b, bvhA, bvhB);
+		std::cout << "intersection curves: " << intResult.curves.size() << std::endl;
+		int segCount = 0;
+		for (auto& c : intResult.curves) segCount += c.segments.size();
+		std::cout << "intersection segments: " << segCount << std::endl;
+
+		// Debug: check if intersection points are on triangle edges
+		int onEdgeA = 0, onEdgeB = 0, neither = 0;
+		for (auto& c : intResult.curves) {
+			for (auto& seg : c.segments) {
+				const Triangle* triA = a.triangle(seg.triA);
+				const Triangle* triB = b.triangle(seg.triB);
+				if (!triA || !triB) continue;
+
+				Point va0(triA->vertex(0)->x, triA->vertex(0)->y, triA->vertex(0)->z);
+				Point va1(triA->vertex(1)->x, triA->vertex(1)->y, triA->vertex(1)->z);
+				Point va2(triA->vertex(2)->x, triA->vertex(2)->y, triA->vertex(2)->z);
+
+				int eA0 = mesh_intersect::findEdge(seg.start, va0, va1, va2, 1e-4);
+				int eA1 = mesh_intersect::findEdge(seg.end, va0, va1, va2, 1e-4);
+
+				if (eA0 >= 0) onEdgeA++; else neither++;
+				if (eA1 >= 0) onEdgeA++; else neither++;
+			}
+		}
+		std::cout << "points on triA edges: " << onEdgeA << ", not on edge: " << neither << std::endl;
+
 		runTest("box_box", a, b);
+
+		// Debug: check vertex merging
+		auto result = csg::meshUnion(a, b);
+		if (result.success) {
+			// Check for duplicate vertices
+			int dupCount = 0;
+			for (std::size_t i = 0; i < result.mesh.vertexCount(); ++i) {
+				const Vertex* vi = result.mesh.findByIndex(static_cast<int>(i));
+				if (!vi) continue;
+				for (std::size_t j = i + 1; j < result.mesh.vertexCount(); ++j) {
+					const Vertex* vj = result.mesh.findByIndex(static_cast<int>(j));
+					if (!vj) continue;
+					double d = Vec3(vi->x - vj->x, vi->y - vj->y, vi->z - vj->z).cachedLength();
+					if (d < 1e-4) dupCount++;
+				}
+			}
+			std::cout << "duplicate vertex pairs: " << dupCount << std::endl;
+		}
 	}
 
 	// Test 2: Box and sphere (sphere inside box)
