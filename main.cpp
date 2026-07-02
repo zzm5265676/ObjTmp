@@ -21,6 +21,8 @@ int main() {
 		return 1;
 	}
 	//mesh.printEdgeUsageSummary();
+	auto log = mesh.validateBasicTopology();
+	mesh.checkManifoldAndWatertight();
 	/*std::vector<std::vector<Vertex*>> components = mesh.connectedVertexComponents();
 	for (std::size_t i = 0; i < components.size(); ++i) {
 		auto tris = mesh.collectTriangleFromVertexComponent(components[i]);

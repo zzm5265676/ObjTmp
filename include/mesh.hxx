@@ -96,6 +96,21 @@ struct MeshValidationReport {
 			&& brokenOppositeEdges.empty();
 	}
 };
+/**
+ *  有洞？
+ *  有非流形边？
+ *  有非流形点？
+ *  面方向不一致？
+ *  有退化三角形？.
+ */
+struct MeshCheckReport {
+	int boundaryEdgeCount = 0;
+	int nonManifoldEdgeCount = 0;
+	int inconsistentOrientationEdgeCount = 0;
+	int nonManifoldVertexCount = 0;
+	int isolatedVertexCount = 0;
+	int degenerateTriangleCount = 0;
+};
 class Mesh {
 private:
 	std::vector<std::unique_ptr<Vertex>> vertices_;//不需要equal和hash，只有点
@@ -558,5 +573,27 @@ public:
 	std::size_t directedTriangleCount(const Edge* e) const;
 	std::size_t undirectedTriangleCount(const EdgePair& pair) const;
 	void printEdgeUsageSummary() const;
+
+	//流形和水密检查
+	//第一步：边级检查
+	void checkEdgeManifoldAndBoundary(MeshCheckReport& report) const;
+
+	//第二步：方向一致性检查
+	void checkOrientationConsistency() const;
+
+	//第三步：退化三角形检查
+	void checkDegenerateTriangles(MeshCheckReport& report) const;
+
+	//第四步：点级非流形检查
+	void checkNonManifoldVertices(MeshCheckReport& report) const;
+	//判断两个三角形是否共享一条包含 center 的边
+	bool trianglesShareEdgeAtVertex(const Triangle* t0, const Triangle* t1, const Vertex* center) const;
+	//检查单个顶点是否是非流形点
+	bool isNonManifoldVertex(const Vertex* center) const;
+	//第六步：汇总
+	MeshCheckReport checkManifoldAndWatertight() const;
+
+
 };
+
 
