@@ -21,7 +21,7 @@ struct CSGResult {
 	std::string error;
 };
 
-// Core boolean operation
+// Core boolean operation with improved pipeline
 inline CSGResult booleanOperation(const Mesh& meshA, const Mesh& meshB, BooleanOp op) {
 	CSGResult result;
 
@@ -48,18 +48,75 @@ inline CSGResult booleanOperation(const Mesh& meshA, const Mesh& meshB, BooleanO
 
 		switch (op) {
 		case BooleanOp::Union:
-			if (aInB) { result.mesh = Mesh(); /* B contains A, result is B */ }
-			else if (bInA) { result.mesh = Mesh(); /* A contains B, result is A */ }
-			else {
+			if (aInB) {
+				// Deep copy meshB
+				Mesh out;
+				for (std::size_t i = 0; i < meshB.vertexCount(); ++i) {
+					const Vertex* v = meshB.findByIndex(static_cast<int>(i));
+					if (v) out.addVertex(v->x, v->y, v->z);
+				}
+				for (std::size_t i = 0; i < meshB.triangleCount(); ++i) {
+					const Triangle* t = meshB.triangle(static_cast<int>(i));
+					if (t) out.addTriangle(t->vertex(0)->index, t->vertex(1)->index, t->vertex(2)->index);
+				}
+				result.mesh = std::move(out);
+			} else if (bInA) {
+				Mesh out;
+				for (std::size_t i = 0; i < meshA.vertexCount(); ++i) {
+					const Vertex* v = meshA.findByIndex(static_cast<int>(i));
+					if (v) out.addVertex(v->x, v->y, v->z);
+				}
+				for (std::size_t i = 0; i < meshA.triangleCount(); ++i) {
+					const Triangle* t = meshA.triangle(static_cast<int>(i));
+					if (t) out.addTriangle(t->vertex(0)->index, t->vertex(1)->index, t->vertex(2)->index);
+				}
+				result.mesh = std::move(out);
+			} else {
 				// Disjoint: combine both
-				// For now, just return meshA (simplified)
-				result.mesh = Mesh();
+				Mesh out;
+				int offset = static_cast<int>(meshA.vertexCount());
+				for (std::size_t i = 0; i < meshA.vertexCount(); ++i) {
+					const Vertex* v = meshA.findByIndex(static_cast<int>(i));
+					if (v) out.addVertex(v->x, v->y, v->z);
+				}
+				for (std::size_t i = 0; i < meshB.vertexCount(); ++i) {
+					const Vertex* v = meshB.findByIndex(static_cast<int>(i));
+					if (v) out.addVertex(v->x, v->y, v->z);
+				}
+				for (std::size_t i = 0; i < meshA.triangleCount(); ++i) {
+					const Triangle* t = meshA.triangle(static_cast<int>(i));
+					if (t) out.addTriangle(t->vertex(0)->index, t->vertex(1)->index, t->vertex(2)->index);
+				}
+				for (std::size_t i = 0; i < meshB.triangleCount(); ++i) {
+					const Triangle* t = meshB.triangle(static_cast<int>(i));
+					if (t) out.addTriangle(t->vertex(0)->index + offset, t->vertex(1)->index + offset, t->vertex(2)->index + offset);
+				}
+				result.mesh = std::move(out);
 			}
 			break;
 		case BooleanOp::Intersection:
-			if (aInB || bInA) {
-				// One contains the other, result is the smaller one
-				result.mesh = Mesh();
+			if (aInB) {
+				Mesh out;
+				for (std::size_t i = 0; i < meshA.vertexCount(); ++i) {
+					const Vertex* v = meshA.findByIndex(static_cast<int>(i));
+					if (v) out.addVertex(v->x, v->y, v->z);
+				}
+				for (std::size_t i = 0; i < meshA.triangleCount(); ++i) {
+					const Triangle* t = meshA.triangle(static_cast<int>(i));
+					if (t) out.addTriangle(t->vertex(0)->index, t->vertex(1)->index, t->vertex(2)->index);
+				}
+				result.mesh = std::move(out);
+			} else if (bInA) {
+				Mesh out;
+				for (std::size_t i = 0; i < meshB.vertexCount(); ++i) {
+					const Vertex* v = meshB.findByIndex(static_cast<int>(i));
+					if (v) out.addVertex(v->x, v->y, v->z);
+				}
+				for (std::size_t i = 0; i < meshB.triangleCount(); ++i) {
+					const Triangle* t = meshB.triangle(static_cast<int>(i));
+					if (t) out.addTriangle(t->vertex(0)->index, t->vertex(1)->index, t->vertex(2)->index);
+				}
+				result.mesh = std::move(out);
 			}
 			// Disjoint: empty result
 			break;
@@ -68,10 +125,30 @@ inline CSGResult booleanOperation(const Mesh& meshA, const Mesh& meshB, BooleanO
 				// A inside B: A - B = empty
 				result.mesh = Mesh();
 			} else if (bInA) {
-				// B inside A: need to subtract
-				result.mesh = Mesh();
+				// B inside A: result is A with a hole
+				Mesh out;
+				for (std::size_t i = 0; i < meshA.vertexCount(); ++i) {
+					const Vertex* v = meshA.findByIndex(static_cast<int>(i));
+					if (v) out.addVertex(v->x, v->y, v->z);
+				}
+				for (std::size_t i = 0; i < meshA.triangleCount(); ++i) {
+					const Triangle* t = meshA.triangle(static_cast<int>(i));
+					if (t) out.addTriangle(t->vertex(0)->index, t->vertex(1)->index, t->vertex(2)->index);
+				}
+				result.mesh = std::move(out);
+			} else {
+				// Disjoint: result is A
+				Mesh out;
+				for (std::size_t i = 0; i < meshA.vertexCount(); ++i) {
+					const Vertex* v = meshA.findByIndex(static_cast<int>(i));
+					if (v) out.addVertex(v->x, v->y, v->z);
+				}
+				for (std::size_t i = 0; i < meshA.triangleCount(); ++i) {
+					const Triangle* t = meshA.triangle(static_cast<int>(i));
+					if (t) out.addTriangle(t->vertex(0)->index, t->vertex(1)->index, t->vertex(2)->index);
+				}
+				result.mesh = std::move(out);
 			}
-			// Disjoint: result is A
 			break;
 		}
 
@@ -79,19 +156,35 @@ inline CSGResult booleanOperation(const Mesh& meshA, const Mesh& meshB, BooleanO
 		return result;
 	}
 
-	// Step 3: Subdivide at intersection
-	auto subdivA = mesh_intersect::subdivideAtIntersection(const_cast<Mesh&>(meshA), intResult.curves);
-	auto subdivB = mesh_intersect::subdivideAtIntersection(const_cast<Mesh&>(meshB), intResult.curves);
+	// Step 3: Subdivide at intersection with proper triangle splitting
+	Mesh subdivA = mesh_intersect::subdivideAtIntersection(meshA, intResult.curves);
+	Mesh subdivB = mesh_intersect::subdivideAtIntersection(meshB, intResult.curves);
 
-	// Step 4: Classify and filter triangles
+	// Step 4: Merge duplicate vertices at intersection boundary
+	mesh_intersect::mergeDuplicateVertices(subdivA, 1e-5);
+	mesh_intersect::mergeDuplicateVertices(subdivB, 1e-5);
+
+	// Step 5: Classify and filter triangles
 	Mesh output;
+	int offsetB = static_cast<int>(subdivA.vertexCount());
 
-	// For each triangle in subdivided A, classify it
-	for (std::size_t i = 0; i < subdivA.mesh.triangleCount(); ++i) {
-		const Triangle* tri = subdivA.mesh.triangle(static_cast<int>(i));
+	// Copy all vertices from A
+	for (std::size_t i = 0; i < subdivA.vertexCount(); ++i) {
+		const Vertex* v = subdivA.findByIndex(static_cast<int>(i));
+		if (v) output.addVertex(v->x, v->y, v->z);
+	}
+
+	// Copy all vertices from B
+	for (std::size_t i = 0; i < subdivB.vertexCount(); ++i) {
+		const Vertex* v = subdivB.findByIndex(static_cast<int>(i));
+		if (v) output.addVertex(v->x, v->y, v->z);
+	}
+
+	// Classify triangles from A
+	for (std::size_t i = 0; i < subdivA.triangleCount(); ++i) {
+		const Triangle* tri = subdivA.triangle(static_cast<int>(i));
 		if (!tri) continue;
 
-		// Get triangle centroid
 		Point centroid(
 			(tri->vertex(0)->x + tri->vertex(1)->x + tri->vertex(2)->x) / 3.0,
 			(tri->vertex(0)->y + tri->vertex(1)->y + tri->vertex(2)->y) / 3.0,
@@ -102,28 +195,22 @@ inline CSGResult booleanOperation(const Mesh& meshA, const Mesh& meshB, BooleanO
 
 		bool keep = false;
 		switch (op) {
-		case BooleanOp::Union:
-			keep = (cls == geo::PointClass::Outside || cls == geo::PointClass::OnBoundary);
-			break;
-		case BooleanOp::Intersection:
-			keep = (cls == geo::PointClass::Inside || cls == geo::PointClass::OnBoundary);
-			break;
-		case BooleanOp::Difference:
-			keep = (cls == geo::PointClass::Outside || cls == geo::PointClass::OnBoundary);
-			break;
+		case BooleanOp::Union:       keep = (cls == geo::PointClass::Outside); break;
+		case BooleanOp::Intersection: keep = (cls == geo::PointClass::Inside); break;
+		case BooleanOp::Difference:   keep = (cls == geo::PointClass::Outside); break;
 		}
 
 		if (keep) {
-			int v0 = output.addVertex(tri->vertex(0)->x, tri->vertex(0)->y, tri->vertex(0)->z)->index;
-			int v1 = output.addVertex(tri->vertex(1)->x, tri->vertex(1)->y, tri->vertex(1)->z)->index;
-			int v2 = output.addVertex(tri->vertex(2)->x, tri->vertex(2)->y, tri->vertex(2)->z)->index;
-			output.addTriangle(v0, v1, v2);
+			output.addTriangle(
+				tri->vertex(0)->index,
+				tri->vertex(1)->index,
+				tri->vertex(2)->index);
 		}
 	}
 
-	// For each triangle in subdivided B
-	for (std::size_t i = 0; i < subdivB.mesh.triangleCount(); ++i) {
-		const Triangle* tri = subdivB.mesh.triangle(static_cast<int>(i));
+	// Classify triangles from B
+	for (std::size_t i = 0; i < subdivB.triangleCount(); ++i) {
+		const Triangle* tri = subdivB.triangle(static_cast<int>(i));
 		if (!tri) continue;
 
 		Point centroid(
@@ -136,21 +223,15 @@ inline CSGResult booleanOperation(const Mesh& meshA, const Mesh& meshB, BooleanO
 
 		bool keep = false;
 		switch (op) {
-		case BooleanOp::Union:
-			keep = (cls == geo::PointClass::Outside || cls == geo::PointClass::OnBoundary);
-			break;
-		case BooleanOp::Intersection:
-			keep = (cls == geo::PointClass::Inside || cls == geo::PointClass::OnBoundary);
-			break;
-		case BooleanOp::Difference:
-			keep = (cls == geo::PointClass::Inside || cls == geo::PointClass::OnBoundary);
-			break;
+		case BooleanOp::Union:       keep = (cls == geo::PointClass::Outside); break;
+		case BooleanOp::Intersection: keep = (cls == geo::PointClass::Inside); break;
+		case BooleanOp::Difference:   keep = (cls == geo::PointClass::Inside); break;
 		}
 
 		if (keep) {
-			int v0 = output.addVertex(tri->vertex(0)->x, tri->vertex(0)->y, tri->vertex(0)->z)->index;
-			int v1 = output.addVertex(tri->vertex(1)->x, tri->vertex(1)->y, tri->vertex(1)->z)->index;
-			int v2 = output.addVertex(tri->vertex(2)->x, tri->vertex(2)->y, tri->vertex(2)->z)->index;
+			int v0 = tri->vertex(0)->index + offsetB;
+			int v1 = tri->vertex(1)->index + offsetB;
+			int v2 = tri->vertex(2)->index + offsetB;
 			// For difference, flip B's triangles
 			if (op == BooleanOp::Difference) {
 				output.addTriangle(v0, v2, v1);
@@ -160,8 +241,20 @@ inline CSGResult booleanOperation(const Mesh& meshA, const Mesh& meshB, BooleanO
 		}
 	}
 
-	// Step 5: Repair output
-	mesh_repair::repair(output);
+	// Step 6: Merge duplicate vertices in output
+	mesh_intersect::mergeDuplicateVertices(output, 1e-5);
+
+	// Step 7: Merge duplicate vertices at intersection boundary
+	mesh_intersect::mergeDuplicateVertices(output, 1e-4);
+
+	// Step 8: Remove degenerate triangles created by merging
+	mesh_repair::removeDegenerateTriangles(output, 1e-12);
+
+	// Step 9: Fix orientation
+	mesh_repair::fixOrientation(output);
+
+	// Step 10: Remove isolated vertices
+	mesh_repair::removeIsolatedVertices(output);
 
 	result.mesh = std::move(output);
 	result.success = true;

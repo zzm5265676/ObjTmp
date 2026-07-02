@@ -293,21 +293,18 @@ int main() {
 		auto i = csg::meshIntersection(a, b);
 		auto d = csg::meshDifference(a, b);
 
-		if (u.success) {
-			u.mesh.exportObj(basePath + name + "_union.obj");
-			std::cout << "union:        " << u.mesh.vertexCount() << " verts, "
-				<< u.mesh.triangleCount() << " tris" << std::endl;
-		}
-		if (i.success) {
-			i.mesh.exportObj(basePath + name + "_intersect.obj");
-			std::cout << "intersection: " << i.mesh.vertexCount() << " verts, "
-				<< i.mesh.triangleCount() << " tris" << std::endl;
-		}
-		if (d.success) {
-			d.mesh.exportObj(basePath + name + "_diff.obj");
-			std::cout << "difference:   " << d.mesh.vertexCount() << " verts, "
-				<< d.mesh.triangleCount() << " tris" << std::endl;
-		}
+		auto checkMesh = [&](const std::string& op, csg::CSGResult& r) {
+			if (!r.success) return;
+			r.mesh.exportObj(basePath + name + "_" + op + ".obj");
+			auto chk = r.mesh.validateAll();
+			std::cout << op << ": " << r.mesh.vertexCount() << "v " << r.mesh.triangleCount() << "t"
+				<< " watertight=" << chk.isWatertight()
+				<< " manifold=" << chk.isManifold() << std::endl;
+		};
+
+		checkMesh("union", u);
+		checkMesh("intersect", i);
+		checkMesh("diff", d);
 	};
 
 	// Test 1: Two overlapping boxes (translate)
