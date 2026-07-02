@@ -433,33 +433,30 @@ void Mesh::printEdgeUsageSummary() const {
 //};
 //��һ�����߼����
 void Mesh::checkEdgeManifoldAndBoundary(MeshCheckReport& report) const {
-	// 通过 directed_edge_map_ 遍历所有无向边
 	auto undirectedEdges = collectUndirectedEdges();
 	for (const auto& entry : undirectedEdges) {
+		const UndirectedEdgeIndexKey& key = entry.first;
 		const EdgePair& pair = entry.second;
 		int abCount = pair.ab ? static_cast<int>(pair.ab->triangles().size()) : 0;
 		int baCount = pair.ba ? static_cast<int>(pair.ba->triangles().size()) : 0;
 
 		int total = abCount + baCount;
-		switch (total) {
-		case 1:
+		int edgeIdx = pair.ab ? pair.ab->index : (pair.ba ? pair.ba->index : -1);
+		if (total == 1) {
 			report.boundaryEdgeCount++;
-			break;
-		case 2:
-			if (!(abCount == 1 && baCount == 1))
-				report.inconsistentOrientationEdgeCount++;
-			break;
-		case 3:
+			if (edgeIdx >= 0) report.boundaryEdgeIndices.push_back(edgeIdx);
+		} else if (total >= 3) {
 			report.nonManifoldEdgeCount++;
-			break;
+			if (edgeIdx >= 0) report.nonManifoldEdgeIndices.push_back(edgeIdx);
 		}
+		// Note: total==2 orientation check moved to checkOrientationConsistency
 	}
 }
 
 //�ڶ���������һ���Լ��
 void Mesh::checkOrientationConsistency(MeshCheckReport& report) const {
-	// 遍历所有三角形，检查每条边的方向是否与顶点顺序一致
-	// 期望: edge[0] = v0→v1, edge[1] = v1→v2, edge[2] = v2→v0
+	// Check each triangle: edge[i] direction must match vertex ordering
+	// Expected: edge[0] = v0→v1, edge[1] = v1→v2, edge[2] = v2→v0
 	std::unordered_set<int> inconsistentEdges;
 
 	for (const auto& triptr : triangles_) {
@@ -475,7 +472,6 @@ void Mesh::checkOrientationConsistency(MeshCheckReport& report) const {
 		const Edge* e1 = tri->edge(1);
 		const Edge* e2 = tri->edge(2);
 
-		// 检查 edge[i] 的方向是否与顶点顺序匹配
 		if (e0 && (e0->from() != v0 || e0->to() != v1)) {
 			inconsistentEdges.insert(e0->index);
 		}
@@ -487,14 +483,19 @@ void Mesh::checkOrientationConsistency(MeshCheckReport& report) const {
 		}
 	}
 
-	report.inconsistentOrientationEdgeCount += static_cast<int>(inconsistentEdges.size());
+	report.inconsistentOrientationEdgeCount = static_cast<int>(inconsistentEdges.size());
+	report.inconsistentOrientationEdgeIndices.assign(inconsistentEdges.begin(), inconsistentEdges.end());
+	std::sort(report.inconsistentOrientationEdgeIndices.begin(),
+		report.inconsistentOrientationEdgeIndices.end());
 }
 
 //���������˻������μ��
 void Mesh::checkDegenerateTriangles(MeshCheckReport& report) const {
 	for (const auto& triptr : triangles_) {
-		if (triptr->area < 1e-12)
+		if (triptr->area < 1e-12) {
 			report.degenerateTriangleCount++;
+			report.degenerateTriangleIndices.push_back(triptr->index);
+		}
 	}
 }
 
@@ -502,23 +503,21 @@ void Mesh::checkDegenerateTriangles(MeshCheckReport& report) const {
 void Mesh::checkNonManifoldVertices(MeshCheckReport& report) const {
 	for (const auto& vtptr : vertices_) {
 		const Vertex* v = vtptr.get();
-
-		if (!v) {
-			continue;
-		}
+		if (!v) continue;
 
 		const auto& neiTris = v->getNeiTriangles();
 
 		if (neiTris.empty()) {
 			report.isolatedVertexCount++;
+			report.isolatedVertexIndices.push_back(v->index);
 			continue;
 		}
 
 		if (isNonManifoldVertex(v)) {
 			report.nonManifoldVertexCount++;
+			report.nonManifoldVertexIndices.push_back(v->index);
 		}
 	}
-
 }
 //��鵥�������Ƿ��Ƿ����ε�
 bool Mesh::isNonManifoldVertex(const Vertex* center) const {
@@ -595,12 +594,177 @@ bool Mesh::isNonManifoldVertex(const Vertex* center) const {
 
 	return false;
 }
-//������������
+
+// ===== Self-intersection detection =====
+
+namespace {
+
+	struct AABB {
+		double minX, minY, minZ;
+		double maxX, maxY, maxZ;
+
+		AABB() : minX(1e30), minY(1e30), minZ(1e30),
+		         maxX(-1e30), maxY(-1e30), maxZ(-1e30) {}
+
+		void expand(double x, double y, double z) {
+			if (x < minX) minX = x; if (x > maxX) maxX = x;
+			if (y < minY) minY = y; if (y > maxY) maxY = y;
+			if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+		}
+
+		bool overlaps(const AABB& o) const {
+			return minX <= o.maxX && maxX >= o.minX
+				&& minY <= o.maxY && maxY >= o.minY
+				&& minZ <= o.maxZ && maxZ >= o.minZ;
+		}
+	};
+
+	AABB triAABB(const Triangle* tri) {
+		AABB box;
+		for (int i = 0; i < 3; ++i) {
+			Vertex* v = tri->vertex(i);
+			if (v) box.expand(v->x, v->y, v->z);
+		}
+		return box;
+	}
+
+	// Strict Moller-Trumbore: only reports proper crossings
+	// margin = minimum distance from triangle edges (reduces false positives)
+	bool rayTriIntersect(const Vec3& origin, const Vec3& dir,
+	                     const Vec3& v0, const Vec3& v1, const Vec3& v2,
+	                     double& t, double margin = 1e-6) {
+		Vec3 e1 = v1 - v0;
+		Vec3 e2 = v2 - v0;
+		Vec3 pvec = dir.cross(e2);
+		double det = e1.dot(pvec);
+		if (std::abs(det) < 1e-10) return false;  // coplanar/parallel
+		double invDet = 1.0 / det;
+		Vec3 tvec = origin - v0;
+		double u = tvec.dot(pvec) * invDet;
+		if (u < margin || u > 1.0 - margin) return false;  // near edge
+		Vec3 qvec = tvec.cross(e1);
+		double v = dir.dot(qvec) * invDet;
+		if (v < margin || u + v > 1.0 - margin) return false;  // near edge
+		t = e2.dot(qvec) * invDet;
+		return t > margin;  // proper crossing
+	}
+
+	// Check if edge (p1->p2) properly crosses triangle (v0,v1,v2)
+	bool edgeTriIntersect(const Vec3& p1, const Vec3& p2,
+	                      const Vec3& v0, const Vec3& v1, const Vec3& v2) {
+		Vec3 dir = p2 - p1;
+		double len = dir.cachedLength();
+		if (len < 1e-15) return false;
+		dir = dir.normalize();
+		double t;
+		if (!rayTriIntersect(p1, dir, v0, v1, v2, t)) return false;
+		// Intersection must be strictly between edge endpoints
+		return t > 1e-8 && t < len - 1e-8;
+	}
+
+	// Check if point p is strictly inside triangle (v0,v1,v2) on its plane
+	bool pointInTri(const Vec3& p, const Vec3& v0, const Vec3& v1, const Vec3& v2) {
+		Vec3 n = (v1 - v0).cross(v2 - v0);
+		double nLen = n.cachedLength();
+		if (nLen < 1e-15) return false;  // degenerate triangle
+		Vec3 a = (v1 - v0).cross(p - v0);
+		Vec3 b = (v2 - v1).cross(p - v1);
+		Vec3 c = (v0 - v2).cross(p - v2);
+		// Require point to be strictly inside (not on edges)
+		double dotA = n.dot(a);
+		double dotB = n.dot(b);
+		double dotC = n.dot(c);
+		double eps = nLen * nLen * 1e-6;  // relative tolerance
+		return dotA > eps && dotB > eps && dotC > eps;
+	}
+
+	// Full triangle-triangle intersection test
+	bool triTriIntersect(const Triangle* a, const Triangle* b) {
+		Vec3 a0(a->vertex(0)->x, a->vertex(0)->y, a->vertex(0)->z);
+		Vec3 a1(a->vertex(1)->x, a->vertex(1)->y, a->vertex(1)->z);
+		Vec3 a2(a->vertex(2)->x, a->vertex(2)->y, a->vertex(2)->z);
+		Vec3 b0(b->vertex(0)->x, b->vertex(0)->y, b->vertex(0)->z);
+		Vec3 b1(b->vertex(1)->x, b->vertex(1)->y, b->vertex(1)->z);
+		Vec3 b2(b->vertex(2)->x, b->vertex(2)->y, b->vertex(2)->z);
+
+		// Check edges of A against triangle B
+		if (edgeTriIntersect(a0, a1, b0, b1, b2)) return true;
+		if (edgeTriIntersect(a1, a2, b0, b1, b2)) return true;
+		if (edgeTriIntersect(a2, a0, b0, b1, b2)) return true;
+
+		// Check edges of B against triangle A
+		if (edgeTriIntersect(b0, b1, a0, a1, a2)) return true;
+		if (edgeTriIntersect(b1, b2, a0, a1, a2)) return true;
+		if (edgeTriIntersect(b2, b0, a0, a1, a2)) return true;
+
+		// Check coplanar containment
+		if (pointInTri(a0, b0, b1, b2)) return true;
+		if (pointInTri(b0, a0, a1, a2)) return true;
+
+		return false;
+	}
+
+} // namespace
+
+void Mesh::checkSelfIntersection(MeshCheckReport& report) const {
+	if (triangles_.size() < 2) return;
+
+	// Compute AABB for each triangle
+	std::vector<AABB> aabbs(triangles_.size());
+	for (std::size_t i = 0; i < triangles_.size(); ++i) {
+		if (triangles_[i]) aabbs[i] = triAABB(triangles_[i].get());
+	}
+
+	// Broad phase: AABB overlap + Narrow phase: exact intersection
+	for (std::size_t i = 0; i < triangles_.size(); ++i) {
+		if (!triangles_[i]) continue;
+		for (std::size_t j = i + 1; j < triangles_.size(); ++j) {
+			if (!triangles_[j]) continue;
+			// Skip adjacent triangles (share vertex or edge)
+			int sharedVerts = 0;
+			for (int vi = 0; vi < 3; ++vi) {
+				for (int vj = 0; vj < 3; ++vj) {
+					if (triangles_[i]->vertex(vi) == triangles_[j]->vertex(vj)) {
+						sharedVerts++;
+						break;
+					}
+				}
+			}
+			if (sharedVerts >= 2) continue;  // share edge
+			// Also skip if normals point same direction and very close (coplanar)
+			if (sharedVerts == 1) {
+				double dotN = triangles_[i]->normal().dot(triangles_[j]->normal());
+				if (std::abs(dotN) > 0.99) continue;  // nearly coplanar neighbors
+			}
+
+			if (!aabbs[i].overlaps(aabbs[j])) continue;
+
+			if (triTriIntersect(triangles_[i].get(), triangles_[j].get())) {
+				report.selfIntersectingTriangleCount++;
+				report.selfIntersectingPairs.emplace_back(
+					static_cast<int>(i), static_cast<int>(j));
+			}
+		}
+	}
+}
+
+// Combined check (legacy)
 MeshCheckReport Mesh::checkManifoldAndWatertight() const {
 	MeshCheckReport report;
 	checkEdgeManifoldAndBoundary(report);
 	checkOrientationConsistency(report);
 	checkDegenerateTriangles(report);
 	checkNonManifoldVertices(report);
+	return report;
+}
+
+// Unified entry: all checks
+MeshCheckReport Mesh::validateAll() const {
+	MeshCheckReport report;
+	checkEdgeManifoldAndBoundary(report);
+	checkOrientationConsistency(report);
+	checkDegenerateTriangles(report);
+	checkNonManifoldVertices(report);
+	checkSelfIntersection(report);
 	return report;
 }

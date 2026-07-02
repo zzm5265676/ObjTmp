@@ -12,6 +12,7 @@
 #include "edge.hxx"
 #include "mat4.hxx"
 #include "quat.hxx"
+#include "normals.hxx"
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -22,6 +23,8 @@
 #include <stdexcept>
 #include <string>
 #include <iomanip>
+#include <utility>
+#include <algorithm>
 inline int parseObjVertexIndex(const std::string& token) {
 	std::size_t pos = token.find('/');
 
@@ -106,12 +109,37 @@ struct MeshValidationReport {
  *  ���˻������Σ�.
  */
 struct MeshCheckReport {
+	// Counts
 	int boundaryEdgeCount = 0;
 	int nonManifoldEdgeCount = 0;
 	int inconsistentOrientationEdgeCount = 0;
 	int nonManifoldVertexCount = 0;
 	int isolatedVertexCount = 0;
 	int degenerateTriangleCount = 0;
+	int selfIntersectingTriangleCount = 0;
+
+	// Indices of problematic elements
+	std::vector<int> boundaryEdgeIndices;
+	std::vector<int> nonManifoldEdgeIndices;
+	std::vector<int> inconsistentOrientationEdgeIndices;
+	std::vector<int> nonManifoldVertexIndices;
+	std::vector<int> isolatedVertexIndices;
+	std::vector<int> degenerateTriangleIndices;
+	std::vector<std::pair<int,int>> selfIntersectingPairs;
+
+	// Derived flags
+	bool isWatertight() const { return boundaryEdgeCount == 0; }
+	bool isManifold() const {
+		return nonManifoldEdgeCount == 0 && nonManifoldVertexCount == 0;
+	}
+	bool isOriented() const { return inconsistentOrientationEdgeCount == 0; }
+	bool isDegenerateFree() const { return degenerateTriangleCount == 0; }
+	bool hasSelfIntersection() const { return selfIntersectingTriangleCount > 0; }
+
+	bool ok() const {
+		return isWatertight() && isManifold() && isOriented()
+			&& isDegenerateFree() && !hasSelfIntersection();
+	}
 };
 class Mesh {
 private:
@@ -642,8 +670,12 @@ public:
 	void checkNonManifoldVertices(MeshCheckReport& report) const;
 	//��鵥�������Ƿ��Ƿ����ε�
 	bool isNonManifoldVertex(const Vertex* center) const;
-	//������������
+	// Self-intersection detection
+	void checkSelfIntersection(MeshCheckReport& report) const;
+	// Combined check (legacy)
 	MeshCheckReport checkManifoldAndWatertight() const;
+	// Unified entry: all checks
+	MeshCheckReport validateAll() const;
 
 	// ===== 姿态变换 =====
 
@@ -693,6 +725,82 @@ public:
 
 	void scale(double s) {
 		transform(Mat4::scaling(s));
+	}
+
+	// Compute axis-aligned bounding box
+	// Returns: first = min corner, second = max corner
+	std::pair<Vec3, Vec3> boundingBox() const {
+		Vec3 minV(1e30, 1e30, 1e30);
+		Vec3 maxV(-1e30, -1e30, -1e30);
+		for (const auto& vptr : vertices_) {
+			if (!vptr) continue;
+			minV.x = (std::min)(minV.x, vptr->x);
+			minV.y = (std::min)(minV.y, vptr->y);
+			minV.z = (std::min)(minV.z, vptr->z);
+			maxV.x = (std::max)(maxV.x, vptr->x);
+			maxV.y = (std::max)(maxV.y, vptr->y);
+			maxV.z = (std::max)(maxV.z, vptr->z);
+		}
+		return {minV, maxV};
+	}
+
+	// Normalize mesh to fit within [-1, 1] bounding box
+	// 1. Translate so bounding box center is at origin
+	// 2. Uniform scale so longest axis spans [-1, 1]
+	void normalizeToUnit() {
+		auto [minV, maxV] = boundingBox();
+		Vec3 center(
+			(minV.x + maxV.x) * 0.5,
+			(minV.y + maxV.y) * 0.5,
+			(minV.z + maxV.z) * 0.5
+		);
+		Vec3 extent(maxV.x - minV.x, maxV.y - minV.y, maxV.z - minV.z);
+		double maxExtent = (std::max)({extent.x, extent.y, extent.z});
+		if (maxExtent < 1e-15) return;
+		double s = 2.0 / maxExtent;
+		// Order: first translate to origin, then scale
+		Mat4 mat = Mat4::scaling(s) * Mat4::translation(-center);
+		transform(mat);
+	}
+
+	// ===== Normal computation =====
+
+	// Compute normals for all vertices (default: area-weighted)
+	std::vector<Vec3> computeVertexNormals(
+		NormalComputer::VertexNormalMethod method =
+			NormalComputer::VertexNormalMethod::AreaWeighted) const {
+		return NormalComputer::computeAllVertexNormals(vertices_, method);
+	}
+
+	// Compute normals for all edges
+	std::vector<Vec3> computeEdgeNormals() const {
+		return NormalComputer::computeAllEdgeNormals(edges_);
+	}
+
+	// Access individual edge normal
+	Vec3 edgeNormal(int edgeIdx) const {
+		if (edgeIdx < 0 || edgeIdx >= static_cast<int>(edges_.size())) return Vec3(0,0,0);
+		if (!edges_[edgeIdx]) return Vec3(0,0,0);
+		return NormalComputer::edgeNormal(*edges_[edgeIdx]);
+	}
+
+	// Access individual vertex normal
+	Vec3 vertexNormal(int vertexIdx,
+		NormalComputer::VertexNormalMethod method =
+			NormalComputer::VertexNormalMethod::AreaWeighted) const {
+		if (vertexIdx < 0 || vertexIdx >= static_cast<int>(vertices_.size())) return Vec3(0,0,0);
+		if (!vertices_[vertexIdx]) return Vec3(0,0,0);
+		switch (method) {
+		case NormalComputer::VertexNormalMethod::Simple:
+			return NormalComputer::vertexNormalSimple(*vertices_[vertexIdx]);
+		case NormalComputer::VertexNormalMethod::AreaWeighted:
+			return NormalComputer::vertexNormalAreaWeighted(*vertices_[vertexIdx]);
+		case NormalComputer::VertexNormalMethod::AngleWeighted:
+			return NormalComputer::vertexNormalAngleWeighted(*vertices_[vertexIdx]);
+		case NormalComputer::VertexNormalMethod::FromEdges:
+			return NormalComputer::vertexNormalFromEdges(*vertices_[vertexIdx]);
+		}
+		return Vec3(0,0,0);
 	}
 
 };
