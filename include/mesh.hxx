@@ -13,6 +13,7 @@
 #include "mat4.hxx"
 #include "quat.hxx"
 #include "normals.hxx"
+#include "geometry_utils.hxx"
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -419,6 +420,16 @@ public:
 		return triangles_.size();
 	}
 
+	// Access triangle by index
+	const Triangle* triangle(int idx) const {
+		if (idx < 0 || idx >= static_cast<int>(triangles_.size())) return nullptr;
+		return triangles_[idx].get();
+	}
+	Triangle* triangle(int idx) {
+		if (idx < 0 || idx >= static_cast<int>(triangles_.size())) return nullptr;
+		return triangles_[idx].get();
+	}
+
 	//��ͨ���ж�
 	//ͨ������ж�
 	std::vector<std::vector<Vertex*>> connectedVertexComponents() const {
@@ -804,5 +815,49 @@ public:
 	}
 
 };
+
+// classifyPointInMesh: ray casting point-in-mesh test
+// Uses multiple rays to handle degenerate cases
+inline geo::PointClass classifyPointInMesh(const Point& p, const Mesh& mesh, double eps = 1e-8) {
+	// Check if point is on any triangle face
+	for (std::size_t i = 0; i < mesh.triangleCount(); ++i) {
+		const Triangle* tri = mesh.triangle(static_cast<int>(i));
+		if (tri && geo::pointInTriangle(p, tri, eps)) {
+			return geo::PointClass::OnBoundary;
+		}
+	}
+
+	// Cast ray in +X direction, count unique intersection points
+	Point rayEnd(p.x + 1e6, p.y, p.z);
+	std::vector<double> hitTs;
+
+	for (std::size_t i = 0; i < mesh.triangleCount(); ++i) {
+		const Triangle* tri = mesh.triangle(static_cast<int>(i));
+		if (!tri) continue;
+
+		Vertex* v0 = tri->vertex(0);
+		Vertex* v1 = tri->vertex(1);
+		Vertex* v2 = tri->vertex(2);
+		if (!v0 || !v1 || !v2) continue;
+
+		Point hit;
+		if (geo::segmentTriangleIntersection(p, rayEnd, tri, hit, eps)) {
+			// Use t parameter to deduplicate
+			double t = hit.x - p.x;  // ray is along +X
+			bool duplicate = false;
+			for (double existing : hitTs) {
+				if (std::abs(existing - t) < eps * 100) {
+					duplicate = true;
+					break;
+				}
+			}
+			if (!duplicate) {
+				hitTs.push_back(t);
+			}
+		}
+	}
+
+	return hitTs.size() % 2 == 1 ? geo::PointClass::Inside : geo::PointClass::Outside;
+}
 
 

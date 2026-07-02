@@ -1,4 +1,5 @@
 #include "mesh.hxx"
+#include "geometry_utils.hxx"
 
 #include <algorithm>
 #include <cmath>
@@ -595,124 +596,15 @@ bool Mesh::isNonManifoldVertex(const Vertex* center) const {
 	return false;
 }
 
-// ===== Self-intersection detection =====
-
-namespace {
-
-	struct AABB {
-		double minX, minY, minZ;
-		double maxX, maxY, maxZ;
-
-		AABB() : minX(1e30), minY(1e30), minZ(1e30),
-		         maxX(-1e30), maxY(-1e30), maxZ(-1e30) {}
-
-		void expand(double x, double y, double z) {
-			if (x < minX) minX = x; if (x > maxX) maxX = x;
-			if (y < minY) minY = y; if (y > maxY) maxY = y;
-			if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
-		}
-
-		bool overlaps(const AABB& o) const {
-			return minX <= o.maxX && maxX >= o.minX
-				&& minY <= o.maxY && maxY >= o.minY
-				&& minZ <= o.maxZ && maxZ >= o.minZ;
-		}
-	};
-
-	AABB triAABB(const Triangle* tri) {
-		AABB box;
-		for (int i = 0; i < 3; ++i) {
-			Vertex* v = tri->vertex(i);
-			if (v) box.expand(v->x, v->y, v->z);
-		}
-		return box;
-	}
-
-	// Strict Moller-Trumbore: only reports proper crossings
-	// margin = minimum distance from triangle edges (reduces false positives)
-	bool rayTriIntersect(const Vec3& origin, const Vec3& dir,
-	                     const Vec3& v0, const Vec3& v1, const Vec3& v2,
-	                     double& t, double margin = 1e-6) {
-		Vec3 e1 = v1 - v0;
-		Vec3 e2 = v2 - v0;
-		Vec3 pvec = dir.cross(e2);
-		double det = e1.dot(pvec);
-		if (std::abs(det) < 1e-10) return false;  // coplanar/parallel
-		double invDet = 1.0 / det;
-		Vec3 tvec = origin - v0;
-		double u = tvec.dot(pvec) * invDet;
-		if (u < margin || u > 1.0 - margin) return false;  // near edge
-		Vec3 qvec = tvec.cross(e1);
-		double v = dir.dot(qvec) * invDet;
-		if (v < margin || u + v > 1.0 - margin) return false;  // near edge
-		t = e2.dot(qvec) * invDet;
-		return t > margin;  // proper crossing
-	}
-
-	// Check if edge (p1->p2) properly crosses triangle (v0,v1,v2)
-	bool edgeTriIntersect(const Vec3& p1, const Vec3& p2,
-	                      const Vec3& v0, const Vec3& v1, const Vec3& v2) {
-		Vec3 dir = p2 - p1;
-		double len = dir.cachedLength();
-		if (len < 1e-15) return false;
-		dir = dir.normalize();
-		double t;
-		if (!rayTriIntersect(p1, dir, v0, v1, v2, t)) return false;
-		// Intersection must be strictly between edge endpoints
-		return t > 1e-8 && t < len - 1e-8;
-	}
-
-	// Check if point p is strictly inside triangle (v0,v1,v2) on its plane
-	bool pointInTri(const Vec3& p, const Vec3& v0, const Vec3& v1, const Vec3& v2) {
-		Vec3 n = (v1 - v0).cross(v2 - v0);
-		double nLen = n.cachedLength();
-		if (nLen < 1e-15) return false;  // degenerate triangle
-		Vec3 a = (v1 - v0).cross(p - v0);
-		Vec3 b = (v2 - v1).cross(p - v1);
-		Vec3 c = (v0 - v2).cross(p - v2);
-		// Require point to be strictly inside (not on edges)
-		double dotA = n.dot(a);
-		double dotB = n.dot(b);
-		double dotC = n.dot(c);
-		double eps = nLen * nLen * 1e-6;  // relative tolerance
-		return dotA > eps && dotB > eps && dotC > eps;
-	}
-
-	// Full triangle-triangle intersection test
-	bool triTriIntersect(const Triangle* a, const Triangle* b) {
-		Vec3 a0(a->vertex(0)->x, a->vertex(0)->y, a->vertex(0)->z);
-		Vec3 a1(a->vertex(1)->x, a->vertex(1)->y, a->vertex(1)->z);
-		Vec3 a2(a->vertex(2)->x, a->vertex(2)->y, a->vertex(2)->z);
-		Vec3 b0(b->vertex(0)->x, b->vertex(0)->y, b->vertex(0)->z);
-		Vec3 b1(b->vertex(1)->x, b->vertex(1)->y, b->vertex(1)->z);
-		Vec3 b2(b->vertex(2)->x, b->vertex(2)->y, b->vertex(2)->z);
-
-		// Check edges of A against triangle B
-		if (edgeTriIntersect(a0, a1, b0, b1, b2)) return true;
-		if (edgeTriIntersect(a1, a2, b0, b1, b2)) return true;
-		if (edgeTriIntersect(a2, a0, b0, b1, b2)) return true;
-
-		// Check edges of B against triangle A
-		if (edgeTriIntersect(b0, b1, a0, a1, a2)) return true;
-		if (edgeTriIntersect(b1, b2, a0, a1, a2)) return true;
-		if (edgeTriIntersect(b2, b0, a0, a1, a2)) return true;
-
-		// Check coplanar containment
-		if (pointInTri(a0, b0, b1, b2)) return true;
-		if (pointInTri(b0, a0, a1, a2)) return true;
-
-		return false;
-	}
-
-} // namespace
+// ===== Self-intersection detection (using geo::) =====
 
 void Mesh::checkSelfIntersection(MeshCheckReport& report) const {
 	if (triangles_.size() < 2) return;
 
 	// Compute AABB for each triangle
-	std::vector<AABB> aabbs(triangles_.size());
+	std::vector<geo::AABB> aabbs(triangles_.size());
 	for (std::size_t i = 0; i < triangles_.size(); ++i) {
-		if (triangles_[i]) aabbs[i] = triAABB(triangles_[i].get());
+		if (triangles_[i]) aabbs[i] = geo::computeTriangleAABB(triangles_[i].get());
 	}
 
 	// Broad phase: AABB overlap + Narrow phase: exact intersection
@@ -731,15 +623,15 @@ void Mesh::checkSelfIntersection(MeshCheckReport& report) const {
 				}
 			}
 			if (sharedVerts >= 2) continue;  // share edge
-			// Also skip if normals point same direction and very close (coplanar)
 			if (sharedVerts == 1) {
 				double dotN = triangles_[i]->normal().dot(triangles_[j]->normal());
 				if (std::abs(dotN) > 0.99) continue;  // nearly coplanar neighbors
 			}
 
-			if (!aabbs[i].overlaps(aabbs[j])) continue;
+			if (!geo::overlap(aabbs[i], aabbs[j])) continue;
 
-			if (triTriIntersect(triangles_[i].get(), triangles_[j].get())) {
+			auto result = geo::intersectTriangles(triangles_[i].get(), triangles_[j].get());
+			if (result.type != geo::TriTriIntersectionType::None) {
 				report.selfIntersectingTriangleCount++;
 				report.selfIntersectingPairs.emplace_back(
 					static_cast<int>(i), static_cast<int>(j));

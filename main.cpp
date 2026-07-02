@@ -221,5 +221,26 @@ int main() {
 	std::cout << "torus: watertight=" << torusCheck.isWatertight()
 		<< " manifold=" << torusCheck.isManifold() << std::endl;
 
+	// ===== Geometry Utils Demo =====
+	std::cout << "\n=== Geometry Utils ===" << std::endl;
+
+	// orient3D
+	Point pa(0,0,0), pb(1,0,0), pc(0,1,0), pd(0,0,1);
+	double orient = geo::orient3D(pa, pb, pc, pd);
+	std::cout << "orient3D(above): " << orient << " (positive = above plane)" << std::endl;
+
+	// AABB
+	auto boxAABB = geo::computeTriangleAABB(box.triangle(0));
+	std::cout << "box tri#0 AABB: min(" << boxAABB.minX << "," << boxAABB.minY << "," << boxAABB.minZ
+		<< ") max(" << boxAABB.maxX << "," << boxAABB.maxY << "," << boxAABB.maxZ << ")" << std::endl;
+
+	// Point classification (sphere centered at origin, radius 1)
+	{
+		auto c1 = classifyPointInMesh(Point(0,0,0), sphere);
+		auto c2 = classifyPointInMesh(Point(5,0,0), sphere);
+		std::cout << "sphere: (0,0,0) = " << (c1 == geo::PointClass::Inside ? "Inside" : (c1 == geo::PointClass::OnBoundary ? "OnBoundary" : "Outside")) << std::endl;
+		std::cout << "sphere: (5,0,0) = " << (c2 == geo::PointClass::Inside ? "Inside" : (c2 == geo::PointClass::OnBoundary ? "OnBoundary" : "Outside")) << std::endl;
+	}
+
 	return 0;
 }
