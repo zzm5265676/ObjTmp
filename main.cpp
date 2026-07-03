@@ -3,24 +3,24 @@
 #include<fstream>
 #include<string>
 #include<memory>
-//#include "utils.hxx"
-#include "mesh.hxx"
-#include "creation.hxx"
-#include "repair.hxx"
-#include "bvh.hxx"
-#include "intersect.hxx"
-#include "csg.hxx"
+#include "config.hxx"
+#include "mesh/mesh.hxx"
+#include "operations/creation.hxx"
+#include "operations/repair.hxx"
+#include "geometry/bvh.hxx"
+#include "operations/intersect.hxx"
+#include "operations/csg.hxx"
 
-// 通用工厂函数：用 make_shared 构造任意类型
+//  make_shared 
 template <typename T, typename... Args>
 std::shared_ptr<T> MakeShared(Args&&... args) {
 	return std::make_shared<T>(std::forward<Args>(args)...);
 }
 
 int main() {
-	std::string filePath = "D:/Code/c/ObjTmp/a.obj";
-	std::string outputPath = "D:/Code/c/ObjTmp/exported.obj";
-	std::string basePath = "D:/Code/c/ObjTmp/";
+	std::string filePath = config::INPUT_DIR + "a.obj";
+	std::string outputPath = config::OUTPUT_DIR + "exported.obj";
+	std::string basePath = config::OUTPUT_DIR;
 	auto mesh = MakeShared<Mesh>(filePath);
 	try {
 		std::cout << "load success" << std::endl;
@@ -97,33 +97,33 @@ int main() {
 		std::cout << "edge#0 normal: (" << en[0].x << ", " << en[0].y << ", " << en[0].z << ")" << std::endl;
 	}
 
-	// ===== 姿态变换演示 =====
+	// =====  =====
 	std::cout << "\n=== Transform Demo ===" << std::endl;
 
-	// 记录第一个顶点变换前的坐标
+	// 
 	Vertex* v0 = mesh->findByIndex(0);
 	if (v0) {
 		std::cout << "v0 before: (" << v0->x << ", " << v0->y << ", " << v0->z << ")" << std::endl;
 	}
 
-	// 平移：沿 X 轴移动 10 单位
+	//  X  10 
 	mesh->translate(10.0, 0.0, 0.0);
 	if (v0) {
 		std::cout << "v0 after translate(10,0,0): (" << v0->x << ", " << v0->y << ", " << v0->z << ")" << std::endl;
 	}
 
-	// 用四元数绕 Y 轴旋转 90°
+	//  Y  90
 	Quat q = Quat::fromAxisAngle(Vec3(0, 1, 0), 3.14159265358979 / 2.0);
 	mesh->rotate(q);
 	if (v0) {
 		std::cout << "v0 after rotate Y 90deg: (" << v0->x << ", " << v0->y << ", " << v0->z << ")" << std::endl;
 	}
 
-	// 导出变换后的网格
+	// 
 	mesh->exportObj(outputPath);
 	std::cout << "exported transformed mesh to: " << outputPath << std::endl;
 
-	// 归一化到 [-1, 1]
+	//  [-1, 1]
 	auto [bbMin, bbMax] = mesh->boundingBox();
 	std::cout << "\n=== Normalize to Unit ===" << std::endl;
 	std::cout << "bbox before: min(" << bbMin.x << ", " << bbMin.y << ", " << bbMin.z

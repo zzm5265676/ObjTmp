@@ -1,5 +1,5 @@
 #pragma once
-#include "vec3.hxx"
+#include "core/vec3.hxx"
 #include <cmath>
 #include <stdexcept>
 

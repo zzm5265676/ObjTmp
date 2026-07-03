@@ -1,9 +1,9 @@
 #pragma once
-#include "mesh.hxx"
-#include "bvh.hxx"
-#include "intersect.hxx"
-#include "geometry_utils.hxx"
-#include "repair.hxx"
+#include "mesh/mesh.hxx"
+#include "geometry/bvh.hxx"
+#include "operations/intersect.hxx"
+#include "geometry/geometry_utils.hxx"
+#include "operations/repair.hxx"
 #include <vector>
 #include <string>
 

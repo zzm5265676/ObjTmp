@@ -1,5 +1,5 @@
-#include "mesh.hxx"
-#include "geometry_utils.hxx"
+#include "mesh/mesh.hxx"
+#include "geometry/geometry_utils.hxx"
 
 #include <algorithm>
 #include <cmath>
@@ -9,7 +9,7 @@ namespace {
 
 	using IndexSet = std::unordered_set<int>;
 
-	// 辅助：检查 vector 中是否包含某指针
+	//  vector 
 	template <typename T>
 	bool vecContains(const std::vector<T*>& vec, const T* ptr) {
 		return std::find(vec.begin(), vec.end(), ptr) != vec.end();
@@ -46,16 +46,16 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 	MeshValidationReport report;
 	eps = std::abs(eps);
 
-	// �����ֶα���ͷ�ļ��еļ��нӿڡ����ü����ռ����󣬿ɱ���һ��������
-	// ���������ͬʱʧ�ܶ��ظ����֣�����ǰ�����򣬱�֤�������ȶ���
+	// 
+	// 
 	IndexSet invalidVertices;
 	IndexSet invalidTriangles;
 	IndexSet degenerateTriangles;
 	IndexSet triangleEdgeMismatches;
 	IndexSet brokenEdges;
 
-	// Mesh ���ڽӹ�ϵ��������������Ƿ�ӵ����ָ�롣�κν�����֮ǰ��ͨ��
-	// ����Ȩ����ȷ��ָ�����ڵ�ǰ Mesh������У��������ʱ�ٴδ���δ������Ϊ��
+	// Mesh 
+	//  Mesh
 	std::unordered_set<const Vertex*> ownedVertices;
 	std::unordered_set<const Edge*> ownedEdges;
 	std::unordered_set<const Triangle*> ownedTriangles;
@@ -73,10 +73,10 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 		if (triangle) ownedTriangles.insert(triangle.get());
 	}
 
-	// 1. Vertex У�飺
-	//    a) index ������������±꣬ȷ�� README Լ�����ȶ� ID��
-	//    b) �����ڽӶ�������ɵ�ǰ Mesh ӵ�У�
-	//    c) �ڽӶ���Ӧ˫���ڽӱ�/�������ʵ������ǰ���㡣
+	// 1. Vertex 
+	//    a) index  README  ID
+	//    b)  Mesh 
+	//    c) /
 	for (std::size_t i = 0; i < vertices_.size(); ++i) {
 		const Vertex* vertex = vertices_[i].get();
 		const int index = static_cast<int>(i);
@@ -108,11 +108,11 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 		}
 	}
 
-	// 2. Triangle У�飺
-	//    a) index �������±�һ�£������������ڵ�ǰ Mesh��
-	//    b) ���㲻���ظ�����������������Ҳ�С�� eps��
-	//    c) edge(0..2) �������ζ�Ӧ v0->v1��v1->v2��v2->v0��
-	//    d) Vertex/Edge �� Triangle �ķ����ڽӱ�����ڡ�
+	// 2. Triangle 
+	//    a) index  Mesh
+	//    b)  eps
+	//    c) edge(0..2)  v0->v1v1->v2v2->v0
+	//    d) Vertex/Edge  Triangle 
 	for (std::size_t i = 0; i < triangles_.size(); ++i) {
 		const Triangle* triangle = triangles_[i].get();
 		const int index = static_cast<int>(i);
@@ -168,12 +168,12 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 		}
 	}
 
-	// 3. Edge У�飺
-	//    a) index���˵�����Ȩ�� directed_edge_map_ ����һ�£�
-	//    b) EdgePair �е� ab/ba ��λ������淶���˵㷽��һ�£�
-	//    c) opposite �������ڱ� Mesh�������෴��˫��Գƣ�
-	//    d) triangles_ �е��������ʵ���ø�����ߣ�
-	//    e) �����˵���뱣��ñ߼��˴˵��ڽӹ�ϵ��
+	// 3. Edge 
+	//    a) index directed_edge_map_ 
+	//    b) EdgePair  ab/ba 
+	//    c) opposite  Mesh
+	//    d) triangles_ 
+	//    e) 
 	for (std::size_t i = 0; i < edges_.size(); ++i) {
 		const Edge* edge = edges_[i].get();
 		const int index = static_cast<int>(i);
@@ -196,7 +196,7 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 			valid = false;
 		}
 
-		// 验证无向边对：检查 opposite 边是否在 directed_edge_map_ 中
+		//  opposite  directed_edge_map_ 
 		{
 			EdgePair pair = getUndirectedEdgePair(from->index, to->index);
 			const Edge* expected =
@@ -234,7 +234,7 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 		if (!valid) brokenEdges.insert(index);
 	}
 
-	// 4. �� map ���������������� key ��������ָ���Լ�δ�� edges_ ӵ�еĶ���
+	// 4.  map  key  edges_ 
 	for (const auto& entry : directed_edge_map_) {
 		const DirectedEdgeIndexKey& key = entry.first;
 		const Edge* edge = entry.second;
@@ -247,7 +247,7 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 		}
 	}
 
-	// 4b. 验证无向边对的 opposite 关系
+	// 4b.  opposite 
 	for (const auto& entry : collectUndirectedEdges()) {
 		const UndirectedEdgeIndexKey& key = entry.first;
 		const EdgePair& pair = entry.second;
@@ -294,13 +294,13 @@ MeshValidationReport Mesh::validateBasicTopology(double eps) const {
 }
 
 std::size_t Mesh::directedTriangleCount(const Edge* e) const {
-	// �����ֻͳ��ֱ�Ӵ�������� triangles_ �е��档
+	//  triangles_ 
 	return e ? e->triangles().size() : 0;
 }
 
 std::size_t Mesh::undirectedTriangleCount(const EdgePair& pair) const {
-	// �������������ϲ�Ӧ���ͬһ�� Triangle������ʹ�ü��ϲ��������Ǽ���ӣ�
-	// ��ʹ�����Ѿ��𻵣�Ҳ�����ͬһ��������ͳ�����Ρ�
+	//  Triangle
+	// 
 	std::unordered_set<const Triangle*> triangles;
 	if (pair.ab) {
 		triangles.insert(pair.ab->triangles().begin(),
@@ -321,7 +321,7 @@ void Mesh::printEdgeUsageSummary() const {
 	std::size_t inconsistentOrientationCount = 0;
 	std::size_t brokenPairCount = 0;
 
-	// 先做所有权校验，只引用当前 Mesh 拥有的 Edge/Vertex
+	//  Mesh  Edge/Vertex
 	std::unordered_set<const Edge*> ownedEdges;
 	std::unordered_set<const Vertex*> ownedVertices;
 	ownedEdges.reserve(edges_.size());
@@ -333,7 +333,7 @@ void Mesh::printEdgeUsageSummary() const {
 		if (vertex) ownedVertices.insert(vertex.get());
 	}
 
-	// 通过 directed_edge_map_ 收集所有无向边
+	//  directed_edge_map_ 
 	auto undirectedEdges = collectUndirectedEdges();
 
 	for (const auto& entry : undirectedEdges) {
@@ -423,7 +423,7 @@ void Mesh::printEdgeUsageSummary() const {
 	std::cout << "broken edge pairs: " << brokenPairCount << std::endl;
 }
 
-//���κ�ˮ�ܼ��
+//
 //struct MeshCheckReport {
 //	int boundaryEdgeCount = 0;
 //	int nonManifoldEdgeCount = 0;
@@ -432,7 +432,7 @@ void Mesh::printEdgeUsageSummary() const {
 //	int isolatedVertexCount = 0;
 //	int degenerateTriangleCount = 0;
 //};
-//��һ�����߼����
+//
 void Mesh::checkEdgeManifoldAndBoundary(MeshCheckReport& report) const {
 	auto undirectedEdges = collectUndirectedEdges();
 	for (const auto& entry : undirectedEdges) {
@@ -454,10 +454,10 @@ void Mesh::checkEdgeManifoldAndBoundary(MeshCheckReport& report) const {
 	}
 }
 
-//�ڶ���������һ���Լ��
+//
 void Mesh::checkOrientationConsistency(MeshCheckReport& report) const {
 	// Check each triangle: edge[i] direction must match vertex ordering
-	// Expected: edge[0] = v0→v1, edge[1] = v1→v2, edge[2] = v2→v0
+	// Expected: edge[0] = v0v1, edge[1] = v1v2, edge[2] = v2v0
 	std::unordered_set<int> inconsistentEdges;
 
 	for (const auto& triptr : triangles_) {
@@ -490,7 +490,7 @@ void Mesh::checkOrientationConsistency(MeshCheckReport& report) const {
 		report.inconsistentOrientationEdgeIndices.end());
 }
 
-//���������˻������μ��
+//
 void Mesh::checkDegenerateTriangles(MeshCheckReport& report) const {
 	for (const auto& triptr : triangles_) {
 		if (triptr->area < 1e-12) {
@@ -500,7 +500,7 @@ void Mesh::checkDegenerateTriangles(MeshCheckReport& report) const {
 	}
 }
 
-//���Ĳ����㼶�����μ��
+//
 void Mesh::checkNonManifoldVertices(MeshCheckReport& report) const {
 	for (const auto& vtptr : vertices_) {
 		const Vertex* v = vtptr.get();
@@ -520,7 +520,7 @@ void Mesh::checkNonManifoldVertices(MeshCheckReport& report) const {
 		}
 	}
 }
-//��鵥�������Ƿ��Ƿ����ε�
+//
 bool Mesh::isNonManifoldVertex(const Vertex* center) const {
 	if (!center) {
 		return false;
@@ -541,22 +541,22 @@ bool Mesh::isNonManifoldVertex(const Vertex* center) const {
 		}
 	}
 
-	// 建立局部 edge→triangles 映射（用 vertex index pair 做 key）
-	// 只关注经过 center 的边
+	//  edgetriangles  vertex index pair  key
+	//  center 
 	std::unordered_map<UndirectedEdgeIndexKey, std::vector<Triangle*>, UndirectedEdgeIndexKeyHash> edgeTriMap;
 
 	for (Triangle* tri : incidentTris) {
 		for (int i = 0; i < 3; ++i) {
 			const Vertex* a = tri->vertex(i);
 			const Vertex* b = tri->vertex((i + 1) % 3);
-			// 只记录包含 center 的边
+			//  center 
 			if (a != center && b != center) continue;
 			UndirectedEdgeIndexKey key(a->index, b->index);
 			edgeTriMap[key].push_back(tri);
 		}
 	}
 
-	// BFS 遍历连通分量：通过共享边连接三角形
+	// BFS 
 	std::unordered_set<Triangle*> visited;
 	int localComponentCount = 0;
 
@@ -574,7 +574,7 @@ bool Mesh::isNonManifoldVertex(const Vertex* center) const {
 			Triangle* cur = q.front();
 			q.pop();
 
-			// 遍历 cur 的三条边，找到共享边的邻居三角形
+			//  cur 
 			for (int i = 0; i < 3; ++i) {
 				const Vertex* a = cur->vertex(i);
 				const Vertex* b = cur->vertex((i + 1) % 3);

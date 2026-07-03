@@ -1,8 +1,8 @@
 #pragma once
-#include "vec3.hxx"
-#include "edge.hxx"
-#include "vertex.hxx"
-#include "triangle.hxx"
+#include "core/vec3.hxx"
+#include "core/edge.hxx"
+#include "core/vertex.hxx"
+#include "core/triangle.hxx"
 #include <cmath>
 #include <vector>
 

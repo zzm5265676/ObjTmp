@@ -1,16 +1,16 @@
 /*****************************************************************//**
  * \file   triangle.hxx
- * \brief  Triangle ��һ���з���������档
- *         edges_[0] Ӧ�ö�Ӧ vertex(0) -> vertex(1)
- *         edges_[1] Ӧ�ö�Ӧ vertex(1) -> vertex(2)
- *         edges_[2] Ӧ�ö�Ӧ vertex(2) -> vertex(0)
+ * \brief  Triangle 
+ *         edges_[0]  vertex(0) -> vertex(1)
+ *         edges_[1]  vertex(1) -> vertex(2)
+ *         edges_[2]  vertex(2) -> vertex(0)
  * \author zzm
  * \date   June 2026
  *********************************************************************/
 #pragma once
-#include "vec3.hxx"
+#include "core/vec3.hxx"
 #include <vector>
-#include "vertex.hxx"
+#include "core/vertex.hxx"
 #include <memory>
 #include <array>
 #include <stdexcept>

@@ -1,5 +1,5 @@
 #pragma once
-#include "point.hxx"
+#include "core/point.hxx"
 
 class Vec3 : public Point {
 private:

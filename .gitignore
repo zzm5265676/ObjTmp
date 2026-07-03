@@ -1,2 +1,4 @@
 build*/
 *.obj
+!data/input/*.obj
+data/output/

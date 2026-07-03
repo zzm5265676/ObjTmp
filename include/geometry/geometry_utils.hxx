@@ -1,7 +1,7 @@
 #pragma once
-#include "point.hxx"
-#include "vec3.hxx"
-#include "triangle.hxx"
+#include "core/point.hxx"
+#include "core/vec3.hxx"
+#include "core/triangle.hxx"
 #include <vector>
 #include <cmath>
 #include <algorithm>

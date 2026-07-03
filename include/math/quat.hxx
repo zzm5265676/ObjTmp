@@ -1,5 +1,5 @@
 #pragma once
-#include "vec3.hxx"
+#include "core/vec3.hxx"
 #include <cmath>
 
 class Mat4;
@@ -133,7 +133,7 @@ public:
 	}
 };
 
-#include "mat4.hxx"
+#include "math/mat4.hxx"
 
 inline Mat4 Quat::toMat4() const {
 	double xx = x * x, yy = y * y, zz = z * z;

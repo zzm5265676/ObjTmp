@@ -1,6 +1,6 @@
 #pragma once
-#include "geometry_utils.hxx"
-#include "mesh.hxx"
+#include "geometry/geometry_utils.hxx"
+#include "mesh/mesh.hxx"
 #include <vector>
 #include <algorithm>
 #include <cmath>

@@ -1,7 +1,7 @@
 #pragma once
-#include "mesh.hxx"
-#include "bvh.hxx"
-#include "geometry_utils.hxx"
+#include "mesh/mesh.hxx"
+#include "geometry/bvh.hxx"
+#include "geometry/geometry_utils.hxx"
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -39,7 +39,7 @@ inline int findEdge(const Point& p, const Point& v0, const Point& v1, const Poin
 // Split a triangle at two points on its edges
 // Returns 3 new triangles
 // The two points must be on DIFFERENT edges
-// triVerts: [v0, v1, v2] — original vertex indices
+// triVerts: [v0, v1, v2]  original vertex indices
 // edge0, p0Idx: first point is on this edge, p0Idx is its vertex index
 // edge1, p1Idx: second point is on this edge, p1Idx is its vertex index
 //
@@ -73,7 +73,7 @@ inline std::vector<std::array<int, 3>> splitTriangle(
 	}
 
 	// Case 2: edges 1 and 2 (share v2)
-	// (v0, p0, p1), (p0, v1, p1), (p0, p1, v2) — same pattern
+	// (v0, p0, p1), (p0, v1, p1), (p0, p1, v2)  same pattern
 	if (edge0 == 1 && edge1 == 2) {
 		result.push_back({v1, p0Idx, p1Idx});
 		result.push_back({p0Idx, v2, p1Idx});
@@ -89,7 +89,7 @@ inline std::vector<std::array<int, 3>> splitTriangle(
 		return result;
 	}
 
-	// Same edge or invalid — return original
+	// Same edge or invalid  return original
 	result.push_back(triVerts);
 	return result;
 }

@@ -1,14 +1,14 @@
 /*****************************************************************//**
  * \file   edge.hxx
- * \brief  明确为有向边。
- *         Edge(v0, v1) 表示 v0 -> v1；
- *         oppositeEdge_ 指向 v1 -> v0；
- *         triangles_ 存储使用这条有向边的 Triangle。
+ * \brief  
+ *         Edge(v0, v1)  v0 -> v1
+ *         oppositeEdge_  v1 -> v0
+ *         triangles_  Triangle
  * \author zzm
  * \date   June 2026
  *********************************************************************/
 #pragma once
-#include "vertex.hxx"
+#include "core/vertex.hxx"
 #include <unordered_set>
 
 class Triangle;
@@ -45,25 +45,25 @@ public:
 	bool setOpposite(Edge* eg) {
 		if (!eg) return false;
 		if (eg == this) return false;
-		// 检查两条边是否确实方向相反
+		// 
 		if (this->v0_ != eg->v1_ || this->v1_ != eg->v0_) {
 			return false;
 		}
-		// 如果已经设置成这个 opposite，直接认为成功
+		//  opposite
 		if (oppositeEdge_ == eg && eg->oppositeEdge_ == this) {
 			return true;
 		}
-		// 如果 this 已经有别的 opposite，不允许覆盖
+		//  this  opposite
 		if (oppositeEdge_ != nullptr && oppositeEdge_ != eg) {
 			return false;
 		}
 
-		// 如果 eg 已经有别的 opposite，不允许覆盖
+		//  eg  opposite
 		if (eg->oppositeEdge_ != nullptr && eg->oppositeEdge_ != this) {
 			return false;
 		}
 
-		// 建立双向关系
+		// 
 		oppositeEdge_ = eg;
 		eg->oppositeEdge_ = this;
 

@@ -1,19 +1,12 @@
-/*****************************************************************//**
- * \file   mesh.hxx
- * \brief  Mesh ��Ψһ�����ߡ�
- *         vertices_ / edges_ / triangles_ �����������ڣ�
- *         map ֻ���������������ͷš�
- * \author zzm
- * \date   June 2026
- *********************************************************************/
+// mesh.hxx - Mesh class definition
 #pragma once 
-#include "point.hxx"
-#include "triangle.hxx"
-#include "edge.hxx"
-#include "mat4.hxx"
-#include "quat.hxx"
-#include "normals.hxx"
-#include "geometry_utils.hxx"
+#include "core/point.hxx"
+#include "core/triangle.hxx"
+#include "core/edge.hxx"
+#include "math/mat4.hxx"
+#include "math/quat.hxx"
+#include "mesh/normals.hxx"
+#include "geometry/geometry_utils.hxx"
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -40,7 +33,7 @@ inline int parseObjVertexIndex(const std::string& token) {
 
 	return std::stoi(indexStr);
 }
-//�����equal��hash
+// hash and equal
 struct DirectedEdgeIndexKey {
 	int from = -1;
 	int to = -1;
@@ -58,7 +51,7 @@ struct DirectedEdgeIndexKeyHash {
 		return h0 ^ (h1 + 0x9e3779b9 + (h0 << 6) + (h0 >> 2));
 	}
 };
-//�����equal��hash
+// hash and equal
 struct UndirectedEdgeIndexKey {
 	int a = -1;
 	int b = -1;
@@ -85,8 +78,8 @@ struct EdgePair {
 	Edge* ba = nullptr;
 };
 
-//�����鱨��
-//���������� Mesh ��û������ì��
+// Validation report
+// Check for contradictions in Mesh
 struct MeshValidationReport {
 	std::vector<int> invalidVertexIndices;
 	std::vector<int> invalidTriangleIndices;
@@ -103,11 +96,11 @@ struct MeshValidationReport {
 	}
 };
 /**
- *  �ж���
- *  �з����αߣ�
- *  �з����ε㣿
- *  �淽��һ�£�
- *  ���˻������Σ�.
+ *  
+ *  
+ *  
+ *  consistent orientation,
+ *  .
  */
 struct MeshCheckReport {
 	// Counts
@@ -149,7 +142,7 @@ private:
 	std::vector<std::unique_ptr<Triangle>> triangles_;
 	std::unordered_map<DirectedEdgeIndexKey, Edge*, DirectedEdgeIndexKeyHash> directed_edge_map_;
 
-	// OBJ 解析时存储法线和纹理坐标
+	// OBJ file loading
 	std::vector<std::array<double, 3>> normals_;
 	std::vector<std::array<double, 2>> texCoords_;
 	std::vector<std::string> parseErrors_;
@@ -163,7 +156,7 @@ public:
 	Mesh& operator=(Mesh&&) noexcept = default;
 
 	Mesh() = default;
-	// OBJ 文件加载
+	// OBJ file loading
 	Mesh(const std::string& filePath) {
 		std::ifstream input(filePath);
 
@@ -228,7 +221,7 @@ public:
 					continue;
 				}
 
-				// 检查索引范围
+				// Check index range
 				bool validRange = true;
 				for (int idx : indices) {
 					if (idx < 0 || idx >= static_cast<int>(vertices_.size())) {
@@ -240,42 +233,42 @@ public:
 				}
 				if (!validRange) continue;
 
-				// 三角形：直接添加
+				// Triangle: add directly
 				if (indices.size() == 3) {
 					addTriangle(indices[0], indices[1], indices[2]);
 				}
 				else {
-					// 多边形：扇形三角化（适用于凸多边形）
+					// Polygon: fan triangulation
 					for (std::size_t i = 1; i + 1 < indices.size(); ++i) {
 						addTriangle(indices[0], indices[i], indices[i + 1]);
 					}
 				}
 			}
-			// 忽略其他行（o, g, s, mtllib, usemtl 等）
+			// Ignore other lines
 		}
 	}
 
-	// 获取解析错误
+	// Get parse errors
 	const std::vector<std::string>& parseErrors() const noexcept {
 		return parseErrors_;
 	}
 
-	// 获取法线数据
+	// Get normal data
 	const std::vector<std::array<double, 3>>& normals() const noexcept {
 		return normals_;
 	}
 
-	// 获取纹理坐标数据
+	// Get texture coordinates
 	const std::vector<std::array<double, 2>>& texCoords() const noexcept {
 		return texCoords_;
 	}
-	// �����vertices_
+	// Add vertex
 	Vertex* addVertex(double x, double y, double z) {
 		int idx = static_cast<int>(vertices_.size());
 		vertices_.push_back(std::make_unique<Vertex>(idx, x, y, z));
 		return vertices_.back().get();
 	}
-	// ͨ���������ص�
+	// Find by index
 	Vertex* findByIndex(int idx) {
 		if (idx < 0 || idx >= static_cast<int>(vertices_.size())) {
 			return nullptr;
@@ -288,7 +281,7 @@ public:
 		}
 		return vertices_[idx].get();
 	}
-	// 通过两个顶点索引获取无向边对（从 directed_edge_map_ 中查找）
+	// Get undirected edge pair by vertex indices
 	EdgePair getUndirectedEdgePair(int i0, int i1) const {
 		EdgePair pair;
 		auto it_ab = directed_edge_map_.find(DirectedEdgeIndexKey(i0, i1));
@@ -298,7 +291,7 @@ public:
 		return pair;
 	}
 
-	// 收集所有唯一的无向边对（用于遍历无向边）
+	// Collect all unique undirected edge pairs
 	std::vector<std::pair<UndirectedEdgeIndexKey, EdgePair>> collectUndirectedEdges() const {
 		std::unordered_set<UndirectedEdgeIndexKey, UndirectedEdgeIndexKeyHash> seen;
 		std::vector<std::pair<UndirectedEdgeIndexKey, EdgePair>> result;
@@ -313,22 +306,22 @@ public:
 		return result;
 	}
 
-	//ͨ����Ѱ�ұ�
-	//�ҵ����أ�û�ҵ����벢����
+	// Find or add edge
+	// Return existing or create new
 	Edge* findOrAddEdge(Vertex* v0, Vertex* v1) {
 		if (!v0 || !v1) { return nullptr; }
 		if (v0 == v1) { return nullptr; }
 
-		// ���������
-		// ����������
-		// �������������
+		// Search directed edge
+		// Search for existing
+		// Directed edge key
 		DirectedEdgeIndexKey dkey(v0->index, v1->index);
-		// ���Ҳ�����
+		// Search for existing
 		auto dit = directed_edge_map_.find(dkey);
 		if (dit != directed_edge_map_.end()) {
 			return dit->second;
 		}
-		// û�����죬׼������
+		// Not found, prepare to create
 		int idx = static_cast<int>(edges_.size());
 		auto edge = std::make_unique<Edge>(idx, v0, v1);
 		Edge* raw = edge.get();
@@ -337,22 +330,22 @@ public:
 
 
 
-		// ���������
-		// ����ķ����
-		// ���췴�������
+		// Directed edge
+		// Reverse direction
+		// Create reverse edge
 		DirectedEdgeIndexKey reverse_key(v1->index, v0->index);
-		// ���Ҳ�����
+		// Search for reverse
 		auto rit = directed_edge_map_.find(reverse_key);
 		if (rit != directed_edge_map_.end()) {
 			Edge* opposite = rit->second;
-			// ������ Edge ��֧�� opposite�����Դ�������
+			// Edge supports opposite, set from here
 			raw->setOpposite(opposite);
 			//opposite->setOpposite(raw);
 		}
 
-		// ����ߣ�Ϊ���������ߣ�����edges_
+		// edges_
 		edges_.push_back(std::move(edge));
-		// ����ߣ�Ϊ���������ߣ�����directed_edge_map_
+		// directed_edge_map_
 		directed_edge_map_.emplace(dkey, raw);
 
 		v0->addNeiVertex(v1);
@@ -364,7 +357,7 @@ public:
 		return raw;
 	}
 	Triangle* addTriangle(int firstIdx, int secondIdx, int thirdIdx) {
-		// ��ȡ��
+		// Get vertex
 		Vertex* firstVertex = findByIndex(firstIdx);
 		Vertex* secondVertex = findByIndex(secondIdx);
 		Vertex* thirdVertex = findByIndex(thirdIdx);
@@ -376,9 +369,9 @@ public:
 			thirdVertex == firstVertex) {
 			return nullptr;
 		}
-		// ������
-		// �߼����
-		// ����߼���edges_
+		// 
+		// 
+		// edges_
 		Edge* edge_1 = findOrAddEdge(firstVertex, secondVertex);
 		Edge* edge_2 = findOrAddEdge(secondVertex, thirdVertex);
 		Edge* edge_3 = findOrAddEdge(thirdVertex, firstVertex);
@@ -388,24 +381,24 @@ public:
 		if (!edge_1 || !edge_2 || !edge_3) {
 			return nullptr;
 		}
-		//����������
+		//
 		int triIndex = triangles_.size();
 		std::unique_ptr<Triangle> tri = std::make_unique<Triangle>(triIndex, firstVertex, secondVertex, thirdVertex);
 		Triangle* raw = tri.get();
 		if (raw->area < 1e-12) {
 			return nullptr;
 		}
-		//�����μ���triangles_
+		//triangles_
 		triangles_.push_back(std::move(tri));
-		//�����μ����
+		//
 		firstVertex->addNeiTri(raw);
 		secondVertex->addNeiTri(raw);
 		thirdVertex->addNeiTri(raw);
-		//�����μ����
+		//
 		edge_1->addTriangle(raw);
 		edge_2->addTriangle(raw);
 		edge_3->addTriangle(raw);
-		//�߼���������
+		//
 		raw->setEdges(edge_1, edge_2, edge_3);
 		return raw;
 	}
@@ -430,15 +423,15 @@ public:
 		return triangles_[idx].get();
 	}
 
-	//��ͨ���ж�
-	//ͨ������ж�
+	// Connected component analysis
+	// Connected component analysis
 	std::vector<std::vector<Vertex*>> connectedVertexComponents() const {
 		std::vector<std::vector<Vertex*>> components;
 		std::unordered_set<Vertex*> visited;
 		for (const std::unique_ptr<Vertex>& vptr : vertices_) {
 			Vertex* start = vptr.get();
 
-			// ��Ϊ�ջ��ߵ��Ѿ������� �������һ����Ĳ�ѯ
+			//  
 			if (!start) continue;
 			if (visited.find(start) != visited.end()) continue;
 
@@ -449,14 +442,14 @@ public:
 			q.push(start);
 
 			while (!q.empty()) {
-				//��ȡ���е�һ��������
+				// Dequeue front
 				Vertex* cur = q.front();
 				q.pop();
 				component.push_back(cur);
 
-				//������������ھӵ�
+				// traverse neighbors
 				for (Vertex* nei : cur->getNeiVertics()) {
-					// �жϵ��Ƿ�Ϊ�պͷ��ʹ�
+					// traverse neighbors
 					if (!nei) continue;
 					if (visited.find(nei) != visited.end()) continue;
 
@@ -470,7 +463,7 @@ public:
 		return components;
 
 	}
-	//ͨ���㼯��ȡÿ����ͨ�������漯
+	// Collect triangles from vertex component
 	std::vector<Triangle*> collectTriangleFromVertexComponent(const std::vector<Vertex*>& component) {
 		std::unordered_set<Triangle*> triSet;
 		for (Vertex* vt : component) {
@@ -482,26 +475,26 @@ public:
 		}
 		return std::vector<Triangle*>(triSet.begin(), triSet.end());
 	}
-	//���ڵ㼯���зָ�
+	// Split by components
 	std::vector<Mesh> splitComponents() {
 		std::vector<Mesh> results;
-		//��ȡ��ͨ����
+		// Get connected components
 		std::vector<std::vector<Vertex*>> components = connectedVertexComponents();
-		//��ÿ����ͨ�������д���������
+		// Process each component
 		for (std::vector<Vertex*> component : components) {
 			Mesh subMesh;
 			std::unordered_map<Vertex*, int> oldToNewIndex;
 
-			//�����㣬����֮ǰ�ģ��൱�ڵ���
+			//
 			for (Vertex* oldVertex : component) {
 				Vertex* newVertex = subMesh.addVertex(oldVertex->x, oldVertex->y, oldVertex->z);
-				//�ɵ�-������
+				//-
 				oldToNewIndex[oldVertex] = newVertex->index;
 			}
-			//�����棬����֮ǰ�ģ��൱�ڵ���
+			//
 			std::vector<Triangle*> tris = collectTriangleFromVertexComponent(component);
 			for (Triangle* oldTri : tris) {
-				//��ȡ�ɵ�
+				// Get old vertices
 				Vertex* ov0 = oldTri->vertex(0);
 				Vertex* ov1 = oldTri->vertex(1);
 				Vertex* ov2 = oldTri->vertex(2);
@@ -509,7 +502,7 @@ public:
 				if (!ov0 || !ov1 || !ov2) {
 					continue;
 				}
-				//��ȡ�ɵ�-��������
+				// Get old-new mapping
 				std::unordered_map<Vertex*, int>::iterator it0 = oldToNewIndex.find(ov0);
 				std::unordered_map<Vertex*, int>::iterator it1 = oldToNewIndex.find(ov1);
 				std::unordered_map<Vertex*, int>::iterator it2 = oldToNewIndex.find(ov2);
@@ -519,7 +512,7 @@ public:
 					it2 == oldToNewIndex.end()) {
 					continue;
 				}
-				//�����µ������index
+				// Add new triangle
 				subMesh.addTriangle(it0->second, it1->second, it2->second);
 			}
 			results.push_back(std::move(subMesh));
@@ -527,7 +520,7 @@ public:
 		return results;
 	}
 
-	//ͨ�������ж�
+	// Connected triangle components
 	std::vector<std::vector<Triangle*>> connectedTriangleComponents() const {
 		std::vector<std::vector<Triangle*>> components;
 		std::unordered_set<Triangle*> visited;
@@ -567,10 +560,10 @@ public:
 						}
 						};
 
-					// ����ͬ���򹲱ߵ������
+					// Same orientation shared edge
 					enqueueTriangles(edge->triangles());
 
-					// ���������£�������λ�ڷ���ߡ�
+					// Also check opposite edge
 					Edge* opposite = edge->opposite();
 					if (opposite) {
 						enqueueTriangles(opposite->triangles());
@@ -590,7 +583,7 @@ public:
 
 
 
-	//��������
+	//
 	bool exportObj(const std::string& filePath) const {
 		std::ofstream output(filePath);
 
@@ -607,7 +600,7 @@ public:
 
 		output << std::fixed << std::setprecision(10);
 
-		// 1. д������
+		// 1. 
 		for (std::size_t i = 0; i < vertices_.size(); ++i) {
 			const Vertex* v = vertices_[i].get();
 
@@ -626,7 +619,7 @@ public:
 
 		output << "\n";
 
-		// 2. д��������
+		// 2. 
 		for (const auto& triPtr : triangles_) {
 			const Triangle* tri = triPtr.get();
 
@@ -661,25 +654,25 @@ public:
 		return true;
 	}
 
-	//���˼�鱨��
+	// Validation check
 	MeshValidationReport validateBasicTopology(double eps = 1e-12) const;
 	std::size_t directedTriangleCount(const Edge* e) const;
 	std::size_t undirectedTriangleCount(const EdgePair& pair) const;
 	void printEdgeUsageSummary() const;
 
-	//���κ�ˮ�ܼ��
-	//��һ�����߼����
+	//
+	//
 	void checkEdgeManifoldAndBoundary(MeshCheckReport& report) const;
 
-	//�ڶ���������һ���Լ��
+	//
 	void checkOrientationConsistency(MeshCheckReport& report) const;
 
-	//���������˻������μ��
+	//
 	void checkDegenerateTriangles(MeshCheckReport& report) const;
 
-	//���Ĳ����㼶�����μ��
+	//
 	void checkNonManifoldVertices(MeshCheckReport& report) const;
-	//��鵥�������Ƿ��Ƿ����ε�
+	//
 	bool isNonManifoldVertex(const Vertex* center) const;
 	// Self-intersection detection
 	void checkSelfIntersection(MeshCheckReport& report) const;
@@ -688,9 +681,9 @@ public:
 	// Unified entry: all checks
 	MeshCheckReport validateAll() const;
 
-	// ===== 姿态变换 =====
+	// =====  =====
 
-	// 对所有顶点应用 4×4 变换矩阵，自动重算法线和面积
+	// Apply to all vertices
 	void transform(const Mat4& mat) {
 		for (auto& vptr : vertices_) {
 			if (!vptr) continue;
@@ -699,13 +692,13 @@ public:
 			vptr->y = pos.y;
 			vptr->z = pos.z;
 		}
-		// 重算所有三角形法线和面积
+		// Recompute all triangle normals and areas
 		for (auto& triptr : triangles_) {
 			if (triptr) triptr->computeNormalAndArea();
 		}
 	}
 
-	// 平移
+	// 
 	void translate(const Vec3& offset) {
 		transform(Mat4::translation(offset));
 	}
@@ -714,22 +707,22 @@ public:
 		transform(Mat4::translation(dx, dy, dz));
 	}
 
-	// 用四元数旋转
+	// 
 	void rotate(const Quat& q) {
 		transform(q.toMat4());
 	}
 
-	// 绕轴旋转
+	// 
 	void rotate(const Vec3& axis, double radians) {
 		transform(Mat4::rotationAxis(axis, radians));
 	}
 
-	// 欧拉角旋转（XYZ 内旋，弧度）
+	// XYZ 
 	void rotateEuler(double pitch, double yaw, double roll) {
 		transform(Quat::fromEuler(pitch, yaw, roll).toMat4());
 	}
 
-	// 缩放
+	// 
 	void scale(double sx, double sy, double sz) {
 		transform(Mat4::scaling(sx, sy, sz));
 	}

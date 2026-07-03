@@ -1,5 +1,5 @@
 #pragma once
-#include "mesh.hxx"
+#include "mesh/mesh.hxx"
 #include <cmath>
 
 namespace mesh_creation {

@@ -1,5 +1,5 @@
 #pragma once
-#include "point.hxx"
+#include "core/point.hxx"
 #include "vec3.hxx"
 #include <vector>
 #include <algorithm>
