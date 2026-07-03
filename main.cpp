@@ -10,6 +10,8 @@
 #include "geometry/bvh.hxx"
 #include "operations/intersect.hxx"
 #include "operations/csg.hxx"
+#include "operations/smooth.hxx"
+#include "operations/decimate.hxx"
 
 //  make_shared 
 template <typename T, typename... Args>
@@ -19,6 +21,7 @@ std::shared_ptr<T> MakeShared(Args&&... args) {
 
 int main() {
 	std::string filePath = config::INPUT_DIR + "a.obj";
+
 	std::string outputPath = config::OUTPUT_DIR + "exported.obj";
 	std::string basePath = config::OUTPUT_DIR;
 	auto mesh = MakeShared<Mesh>(filePath);
@@ -77,10 +80,10 @@ int main() {
 	}
 
 	// Vertex normals with different methods
-	auto vnSimple   = mesh->computeVertexNormals(NormalComputer::VertexNormalMethod::Simple);
-	auto vnArea     = mesh->computeVertexNormals(NormalComputer::VertexNormalMethod::AreaWeighted);
-	auto vnAngle    = mesh->computeVertexNormals(NormalComputer::VertexNormalMethod::AngleWeighted);
-	auto vnEdges    = mesh->computeVertexNormals(NormalComputer::VertexNormalMethod::FromEdges);
+	auto vnSimple = mesh->computeVertexNormals(NormalComputer::VertexNormalMethod::Simple);
+	auto vnArea = mesh->computeVertexNormals(NormalComputer::VertexNormalMethod::AreaWeighted);
+	auto vnAngle = mesh->computeVertexNormals(NormalComputer::VertexNormalMethod::AngleWeighted);
+	auto vnEdges = mesh->computeVertexNormals(NormalComputer::VertexNormalMethod::FromEdges);
 
 	// Show first vertex normal with each method
 	if (mesh->vertexCount() > 0) {
@@ -229,7 +232,7 @@ int main() {
 	std::cout << "\n=== Geometry Utils ===" << std::endl;
 
 	// orient3D
-	Point pa(0,0,0), pb(1,0,0), pc(0,1,0), pd(0,0,1);
+	Point pa(0, 0, 0), pb(1, 0, 0), pc(0, 1, 0), pd(0, 0, 1);
 	double orient = geo::orient3D(pa, pb, pc, pd);
 	std::cout << "orient3D(above): " << orient << " (positive = above plane)" << std::endl;
 
@@ -240,8 +243,8 @@ int main() {
 
 	// Point classification (sphere centered at origin, radius 1)
 	{
-		auto c1 = classifyPointInMesh(Point(0,0,0), sphere);
-		auto c2 = classifyPointInMesh(Point(5,0,0), sphere);
+		auto c1 = classifyPointInMesh(Point(0, 0, 0), sphere);
+		auto c2 = classifyPointInMesh(Point(5, 0, 0), sphere);
 		std::cout << "sphere: (0,0,0) = " << (c1 == geo::PointClass::Inside ? "Inside" : (c1 == geo::PointClass::OnBoundary ? "OnBoundary" : "Outside")) << std::endl;
 		std::cout << "sphere: (5,0,0) = " << (c2 == geo::PointClass::Inside ? "Inside" : (c2 == geo::PointClass::OnBoundary ? "OnBoundary" : "Outside")) << std::endl;
 	}
@@ -300,12 +303,12 @@ int main() {
 			std::cout << op << ": " << r.mesh.vertexCount() << "v " << r.mesh.triangleCount() << "t"
 				<< " watertight=" << chk.isWatertight()
 				<< " manifold=" << chk.isManifold() << std::endl;
-		};
+			};
 
 		checkMesh("union", u);
 		checkMesh("intersect", i);
 		checkMesh("diff", d);
-	};
+		};
 
 	// Test 1: Two overlapping boxes (translate)
 	{
@@ -416,6 +419,26 @@ int main() {
 		auto b = mesh_creation::api_make_box(3, 1, 1);
 		b.rotateEuler(0, 0, 3.14159 / 3.0);  // 60 degrees
 		runTest("box_box_angle", a, b);
+	}
+
+	// ===== Smoothing Demo =====
+	std::cout << "\n=== Smoothing Demo ===" << std::endl;
+	{
+		auto smoothSphere = mesh_creation::api_make_sphere(1.0, 16);
+		std::cout << "sphere before smooth: " << smoothSphere.vertexCount() << " verts" << std::endl;
+		mesh_smooth::smoothLaplacian(smoothSphere, 5, 0.3);
+		std::cout << "sphere after smooth: " << smoothSphere.vertexCount() << " verts" << std::endl;
+		smoothSphere.exportObj(basePath + "smoothed_sphere.obj");
+	}
+
+	// ===== Decimation Demo =====
+	std::cout << "\n=== Decimation Demo ===" << std::endl;
+	{
+		auto highRes = mesh_creation::api_make_sphere(1.0, 32);
+		std::cout << "sphere before decimate: " << highRes.triangleCount() << " tris" << std::endl;
+		mesh_decimate::decimateQEM(highRes, 0.5);
+		std::cout << "sphere after decimate: " << highRes.triangleCount() << " tris" << std::endl;
+		highRes.exportObj(basePath + "decimated_sphere.obj");
 	}
 
 	std::cout << "\n=== All tests complete ===" << std::endl;
