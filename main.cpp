@@ -12,6 +12,8 @@
 #include "operations/csg.hxx"
 #include "operations/smooth.hxx"
 #include "operations/decimate.hxx"
+#include "geometry/curvature.hxx"
+#include "io/ply.hxx"
 
 //  make_shared 
 template <typename T, typename... Args>
@@ -439,6 +441,28 @@ int main() {
 		mesh_decimate::decimateQEM(highRes, 0.5);
 		std::cout << "sphere after decimate: " << highRes.triangleCount() << " tris" << std::endl;
 		highRes.exportObj(basePath + "decimated_sphere.obj");
+	}
+
+	// ===== Curvature Demo =====
+	std::cout << "\n=== Curvature Demo ===" << std::endl;
+	{
+		auto curvSphere = mesh_creation::api_make_sphere(1.0, 16);
+		auto curv = mesh_curvature::computeCurvature(curvSphere);
+		// For a unit sphere, Gaussian curvature should be 1.0
+		double avgK = 0;
+		for (double k : curv.gaussian) avgK += k;
+		avgK /= curv.gaussian.size();
+		std::cout << "sphere avg Gaussian curvature: " << avgK
+			<< " (expected ~1.0)" << std::endl;
+	}
+
+	// ===== PLY/STL Export Demo =====
+	std::cout << "\n=== PLY/STL Export ===" << std::endl;
+	{
+		auto exportMesh = mesh_creation::api_make_box(2, 1, 1);
+		mesh_io::exportPly(exportMesh, basePath + "exported.ply");
+		mesh_io::exportStl(exportMesh, basePath + "exported.stl");
+		std::cout << "exported PLY and STL files" << std::endl;
 	}
 
 	std::cout << "\n=== All tests complete ===" << std::endl;
