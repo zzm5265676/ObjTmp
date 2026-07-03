@@ -4,6 +4,11 @@
 #include <algorithm>
 #include <cmath>
 #include <unordered_set>
+#include <queue>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace {
 
@@ -640,6 +645,117 @@ void Mesh::checkSelfIntersection(MeshCheckReport& report) const {
 	}
 }
 
+// Topology check: Euler characteristic and connected components
+void Mesh::checkTopology(MeshCheckReport& report) const {
+	int V = static_cast<int>(vertices_.size());
+	// edges_ contains directed edges (both directions), undirected = size/2
+	int E = static_cast<int>(collectUndirectedEdges().size());
+	int F = static_cast<int>(triangles_.size());
+	report.eulerCharacteristic = V - E + F;
+
+	// Count connected components via BFS on triangles
+	std::unordered_set<int> visited;
+	int components = 0;
+	for (int i = 0; i < F; ++i) {
+		if (visited.count(i)) continue;
+		if (!triangles_[i]) continue;
+
+		components++;
+		std::queue<int> q;
+		q.push(i);
+		visited.insert(i);
+
+		while (!q.empty()) {
+			int cur = q.front(); q.pop();
+			const Triangle* tri = triangles_[cur].get();
+			if (!tri) continue;
+
+			for (int e = 0; e < 3; ++e) {
+				const Edge* edge = tri->edge(e);
+				if (!edge) continue;
+
+				for (Triangle* neighbor : edge->triangles()) {
+					if (!neighbor) continue;
+					int nidx = neighbor->index;
+					if (!visited.count(nidx)) {
+						visited.insert(nidx);
+						q.push(nidx);
+					}
+				}
+				const Edge* opp = edge->opposite();
+				if (opp) {
+					for (Triangle* neighbor : opp->triangles()) {
+						if (!neighbor) continue;
+						int nidx = neighbor->index;
+						if (!visited.count(nidx)) {
+							visited.insert(nidx);
+							q.push(nidx);
+						}
+					}
+				}
+			}
+		}
+	}
+	report.connectedComponentCount = components;
+}
+
+// Triangle quality check: sliver, needle, cap detection
+void Mesh::checkTriangleQuality(MeshCheckReport& report,
+	double sliverThreshold, double needleRatio, double capAngleDeg) const
+{
+	for (const auto& triptr : triangles_) {
+		if (!triptr) continue;
+		const Triangle* tri = triptr.get();
+
+		Vertex* v0 = tri->vertex(0);
+		Vertex* v1 = tri->vertex(1);
+		Vertex* v2 = tri->vertex(2);
+		if (!v0 || !v1 || !v2) continue;
+
+		// Edge lengths
+		double e0 = Vec3(v1->x - v0->x, v1->y - v0->y, v1->z - v0->z).cachedLength();
+		double e1 = Vec3(v2->x - v1->x, v2->y - v1->y, v2->z - v1->z).cachedLength();
+		double e2 = Vec3(v0->x - v2->x, v0->y - v2->y, v0->z - v2->z).cachedLength();
+
+		double perimeter = e0 + e1 + e2;
+		double area = tri->area;
+
+		// Sliver: area / perimeter^2 is very small (flat triangle)
+		if (perimeter > 1e-12) {
+			double ratio = area / (perimeter * perimeter);
+			if (ratio < sliverThreshold && area > 1e-12) {
+				report.sliverTriangleCount++;
+				report.sliverTriangleIndices.push_back(tri->index);
+			}
+		}
+
+		// Needle: longest edge / shortest edge > threshold
+		double maxEdge = (std::max)({e0, e1, e2});
+		double minEdge = (std::min)({e0, e1, e2});
+		if (minEdge > 1e-12 && maxEdge / minEdge > needleRatio) {
+			report.needleTriangleCount++;
+			report.needleTriangleIndices.push_back(tri->index);
+		}
+
+		// Cap: any angle > threshold
+		double capRad = capAngleDeg * M_PI / 180.0;
+		auto angleAt = [](double a, double b, double c) -> double {
+			if (b < 1e-12 || c < 1e-12) return 0.0;
+			double cosA = (b*b + c*c - a*a) / (2.0 * b * c);
+			cosA = (std::max)(-1.0, (std::min)(1.0, cosA));
+			return std::acos(cosA);
+		};
+
+		double a0 = angleAt(e0, e1, e2);
+		double a1 = angleAt(e1, e0, e2);
+		double a2 = angleAt(e2, e0, e1);
+		if (a0 > capRad || a1 > capRad || a2 > capRad) {
+			report.capTriangleCount++;
+			report.capTriangleIndices.push_back(tri->index);
+		}
+	}
+}
+
 // Combined check (legacy)
 MeshCheckReport Mesh::checkManifoldAndWatertight() const {
 	MeshCheckReport report;
@@ -647,6 +763,7 @@ MeshCheckReport Mesh::checkManifoldAndWatertight() const {
 	checkOrientationConsistency(report);
 	checkDegenerateTriangles(report);
 	checkNonManifoldVertices(report);
+	checkTopology(report);
 	return report;
 }
 
@@ -658,5 +775,7 @@ MeshCheckReport Mesh::validateAll() const {
 	checkDegenerateTriangles(report);
 	checkNonManifoldVertices(report);
 	checkSelfIntersection(report);
+	checkTopology(report);
+	checkTriangleQuality(report);
 	return report;
 }

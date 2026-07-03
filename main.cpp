@@ -54,7 +54,7 @@ int main() {
 	std::cout << "broken opposite edges: " << log.brokenOppositeEdges.size() << std::endl;
 	std::cout << "validation ok: " << (log.ok() ? "YES" : "NO") << std::endl;
 
-	// Full validation (watertight, manifold, oriented, degenerate, self-intersection)
+	// Full validation
 	auto check = mesh->validateAll();
 	std::cout << "\n=== Full Validation ===" << std::endl;
 	std::cout << "boundary edges: " << check.boundaryEdgeCount << std::endl;
@@ -64,6 +64,11 @@ int main() {
 	std::cout << "isolated vertices: " << check.isolatedVertexCount << std::endl;
 	std::cout << "degenerate triangles: " << check.degenerateTriangleCount << std::endl;
 	std::cout << "self-intersecting pairs: " << check.selfIntersectingTriangleCount << std::endl;
+	std::cout << "connected components: " << check.connectedComponentCount << std::endl;
+	std::cout << "Euler characteristic: " << check.eulerCharacteristic << std::endl;
+	std::cout << "sliver triangles: " << check.sliverTriangleCount << std::endl;
+	std::cout << "needle triangles: " << check.needleTriangleCount << std::endl;
+	std::cout << "cap triangles: " << check.capTriangleCount << std::endl;
 	std::cout << "\n--- Flags ---" << std::endl;
 	std::cout << "watertight: " << (check.isWatertight() ? "YES" : "NO") << std::endl;
 	std::cout << "manifold: " << (check.isManifold() ? "YES" : "NO") << std::endl;
@@ -222,13 +227,19 @@ int main() {
 	std::cout << "\n--- Primitive Validation ---" << std::endl;
 	auto boxCheck = box.validateAll();
 	std::cout << "box: watertight=" << boxCheck.isWatertight()
-		<< " manifold=" << boxCheck.isManifold() << std::endl;
+		<< " manifold=" << boxCheck.isManifold()
+		<< " euler=" << boxCheck.eulerCharacteristic
+		<< " comp=" << boxCheck.connectedComponentCount << std::endl;
 	auto sphereCheck = sphere.validateAll();
 	std::cout << "sphere: watertight=" << sphereCheck.isWatertight()
-		<< " manifold=" << sphereCheck.isManifold() << std::endl;
+		<< " manifold=" << sphereCheck.isManifold()
+		<< " euler=" << sphereCheck.eulerCharacteristic
+		<< " comp=" << sphereCheck.connectedComponentCount << std::endl;
 	auto torusCheck = torus.validateAll();
 	std::cout << "torus: watertight=" << torusCheck.isWatertight()
-		<< " manifold=" << torusCheck.isManifold() << std::endl;
+		<< " manifold=" << torusCheck.isManifold()
+		<< " euler=" << torusCheck.eulerCharacteristic
+		<< " comp=" << torusCheck.connectedComponentCount << std::endl;
 
 	// ===== Geometry Utils Demo =====
 	std::cout << "\n=== Geometry Utils ===" << std::endl;

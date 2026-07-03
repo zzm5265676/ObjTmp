@@ -112,6 +112,14 @@ struct MeshCheckReport {
 	int degenerateTriangleCount = 0;
 	int selfIntersectingTriangleCount = 0;
 
+	// New counts
+	int connectedComponentCount = 0;
+	int eulerCharacteristic = 0;
+	int boundaryLoopCount = 0;
+	int sliverTriangleCount = 0;
+	int needleTriangleCount = 0;
+	int capTriangleCount = 0;
+
 	// Indices of problematic elements
 	std::vector<int> boundaryEdgeIndices;
 	std::vector<int> nonManifoldEdgeIndices;
@@ -121,14 +129,26 @@ struct MeshCheckReport {
 	std::vector<int> degenerateTriangleIndices;
 	std::vector<std::pair<int,int>> selfIntersectingPairs;
 
+	// New indices
+	std::vector<int> sliverTriangleIndices;
+	std::vector<int> needleTriangleIndices;
+	std::vector<int> capTriangleIndices;
+
 	// Derived flags
-	bool isWatertight() const { return boundaryEdgeCount == 0; }
+	bool isWatertight() const {
+		return boundaryEdgeCount == 0
+			&& connectedComponentCount == 1
+			&& eulerCharacteristic == 2;
+	}
 	bool isManifold() const {
 		return nonManifoldEdgeCount == 0 && nonManifoldVertexCount == 0;
 	}
 	bool isOriented() const { return inconsistentOrientationEdgeCount == 0; }
 	bool isDegenerateFree() const { return degenerateTriangleCount == 0; }
 	bool hasSelfIntersection() const { return selfIntersectingTriangleCount > 0; }
+	bool isEulerValid() const { return eulerCharacteristic == 2; }
+	bool isSingleComponent() const { return connectedComponentCount == 1; }
+	bool hasDegenerateSlivers() const { return sliverTriangleCount > 0; }
 
 	bool ok() const {
 		return isWatertight() && isManifold() && isOriented()
@@ -676,6 +696,11 @@ public:
 	bool isNonManifoldVertex(const Vertex* center) const;
 	// Self-intersection detection
 	void checkSelfIntersection(MeshCheckReport& report) const;
+	// Euler characteristic and connected components
+	void checkTopology(MeshCheckReport& report) const;
+	// Sliver/needle/cap triangle detection
+	void checkTriangleQuality(MeshCheckReport& report, double sliverThreshold = 1e-3,
+		double needleRatio = 10.0, double capAngleDeg = 170.0) const;
 	// Combined check (legacy)
 	MeshCheckReport checkManifoldAndWatertight() const;
 	// Unified entry: all checks
