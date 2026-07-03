@@ -18,6 +18,11 @@ file(GLOB_RECURSE ALL_HDR CONFIGURE_DEPENDS
 
 add_executable(main main.cpp ${ALL_SRC} ${ALL_HDR})
 
+# Set working directory for VS debugger
+set_target_properties(main PROPERTIES
+    VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # Create output directory
 file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/data/output)
 
