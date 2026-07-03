@@ -41,27 +41,54 @@ inline MergedMesh mergeMeshes(const Mesh& a, const Mesh& b, double eps) {
 	result.mapA.resize(a.vertexCount(), -1);
 	result.mapB.resize(b.vertexCount(), -1);
 
-	// Add all vertices from A
+	// Spatial hash for O(1) vertex lookup
+	std::unordered_map<int64_t, std::vector<int>> hash;
+	auto hashKey = [&](double x, double y, double z) -> int64_t {
+		int ix = static_cast<int>(std::floor(x / eps));
+		int iy = static_cast<int>(std::floor(y / eps));
+		int iz = static_cast<int>(std::floor(z / eps));
+		return int64_t(ix) * 73856093LL ^ int64_t(iy) * 19349663LL ^ int64_t(iz) * 83492791LL;
+	};
+
+	// Add all vertices from A, building spatial hash
 	for (std::size_t i = 0; i < a.vertexCount(); ++i) {
 		const Vertex* v = a.findByIndex(static_cast<int>(i));
-		if (v) result.mapA[i] = result.mesh.addVertex(v->x, v->y, v->z)->index;
+		if (v) {
+			result.mapA[i] = result.mesh.addVertex(v->x, v->y, v->z)->index;
+			hash[hashKey(v->x, v->y, v->z)].push_back(result.mapA[i]);
+		}
 	}
 
-	// Add vertices from B, merging with A
+	// Add vertices from B, merging with A using spatial hash
 	for (std::size_t i = 0; i < b.vertexCount(); ++i) {
 		const Vertex* v = b.findByIndex(static_cast<int>(i));
 		if (!v) continue;
 
 		int match = -1;
-		for (int j = 0; j < static_cast<int>(a.vertexCount()); ++j) {
-			const Vertex* u = a.findByIndex(j);
-			if (!u) continue;
-			double dx = std::abs(v->x - u->x);
-			double dy = std::abs(v->y - u->y);
-			double dz = std::abs(v->z - u->z);
-			if (dx < eps && dy < eps && dz < eps) {
-				match = result.mapA[j];
-				break;
+		int64_t key = hashKey(v->x, v->y, v->z);
+
+		// Check this cell and 26 neighbors
+		for (int dx = -1; dx <= 1 && match < 0; ++dx) {
+			for (int dy = -1; dy <= 1 && match < 0; ++dy) {
+				for (int dz = -1; dz <= 1 && match < 0; ++dz) {
+					int64_t nkey = int64_t(int(key / 73856093LL) + dx) * 73856093LL
+					             ^ int64_t(int(key / 19349663LL) + dy) * 19349663LL
+					             ^ int64_t(int(key / 83492791LL) + dz) * 83492791LL;
+					auto it = hash.find(nkey);
+					if (it == hash.end()) continue;
+
+					for (int idx : it->second) {
+						const Vertex* u = result.mesh.findByIndex(idx);
+						if (!u) continue;
+						double dx2 = std::abs(v->x - u->x);
+						double dy2 = std::abs(v->y - u->y);
+						double dz2 = std::abs(v->z - u->z);
+						if (dx2 < eps && dy2 < eps && dz2 < eps) {
+							match = idx;
+							break;
+						}
+					}
+				}
 			}
 		}
 

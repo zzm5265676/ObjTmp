@@ -357,8 +357,7 @@ int fixOrientation(Mesh& mesh) {
 int fillHoles(Mesh& mesh) {
 	int filled = 0;
 
-	// Find boundary edges (edges with only 1 triangle)
-	// Use the directed_edge_map_ approach
+	// Find boundary edges
 	std::unordered_map<uint64_t, int> edgeCount;
 	for (std::size_t i = 0; i < mesh.triangleCount(); ++i) {
 		const Triangle* tri = mesh.triangle(static_cast<int>(i));
@@ -371,7 +370,7 @@ int fillHoles(Mesh& mesh) {
 		}
 	}
 
-	// Collect boundary edges (count == 1)
+	// Collect boundary adjacency
 	std::unordered_map<int, std::vector<int>> boundaryAdj;
 	for (auto& [key, count] : edgeCount) {
 		if (count == 1) {
@@ -386,7 +385,6 @@ int fillHoles(Mesh& mesh) {
 	for (auto& [start, neighbors] : boundaryAdj) {
 		if (visited.count(start)) continue;
 
-		// Trace one loop
 		std::vector<int> loop;
 		int cur = start;
 		do {
@@ -407,17 +405,256 @@ int fillHoles(Mesh& mesh) {
 			if (!found) break;
 		} while (cur != start && loop.size() < 10000);
 
-		// Close the loop
-		if (cur == start && loop.size() >= 3) {
-			// Fan triangulation from first vertex
-			for (std::size_t i = 1; i + 1 < loop.size(); ++i) {
-				mesh.addTriangle(loop[0], loop[i], loop[i + 1]);
+		if (cur != start || loop.size() < 3) continue;
+
+		// Ear clipping triangulation
+		// For each vertex, check if it's an "ear" (convex and no other vertices inside)
+		std::vector<int> remaining = loop;
+		int maxIter = static_cast<int>(remaining.size()) * remaining.size();
+
+		while (remaining.size() >= 3 && maxIter-- > 0) {
+			bool earFound = false;
+
+			for (std::size_t i = 0; i < remaining.size(); ++i) {
+				std::size_t prev = (i + remaining.size() - 1) % remaining.size();
+				std::size_t next = (i + 1) % remaining.size();
+
+				int i0 = remaining[prev];
+				int i1 = remaining[i];
+				int i2 = remaining[next];
+
+				const Vertex* v0 = mesh.findByIndex(i0);
+				const Vertex* v1 = mesh.findByIndex(i1);
+				const Vertex* v2 = mesh.findByIndex(i2);
+				if (!v0 || !v1 || !v2) continue;
+
+				// Check if vertex is convex (cross product points outward)
+				Vec3 e1(v1->x - v0->x, v1->y - v0->y, v1->z - v0->z);
+				Vec3 e2(v2->x - v1->x, v2->y - v1->y, v2->z - v1->z);
+				Vec3 cross = e1.cross(e2);
+
+				// Check if any other vertex is inside this triangle
+				bool hasInside = false;
+				for (std::size_t j = 0; j < remaining.size(); ++j) {
+					if (j == prev || j == i || j == next) continue;
+					const Vertex* p = mesh.findByIndex(remaining[j]);
+					if (!p) continue;
+
+					// Simple 2D check: project to the plane of the triangle
+					Vec3 e0(v1->x - v0->x, v1->y - v0->y, v1->z - v0->z);
+					Vec3 e1(v2->x - v0->x, v2->y - v0->y, v2->z - v0->z);
+					Vec3 ep(p->x - v0->x, p->y - v0->y, p->z - v0->z);
+
+					double d00 = e0.dot(e0);
+					double d01 = e0.dot(e1);
+					double d11 = e1.dot(e1);
+					double dp0 = ep.dot(e0);
+					double dp1 = ep.dot(e1);
+					double denom = d00 * d11 - d01 * d01;
+					if (std::abs(denom) < 1e-12) continue;
+
+					double u = (d11 * dp0 - d01 * dp1) / denom;
+					double v = (d00 * dp1 - d01 * dp0) / denom;
+
+					if (u > 1e-6 && v > 1e-6 && u + v < 1.0 - 1e-6) {
+						hasInside = true;
+						break;
+					}
+				}
+
+				if (!hasInside) {
+					mesh.addTriangle(i0, i1, i2);
+					filled++;
+					remaining.erase(remaining.begin() + i);
+					earFound = true;
+					break;
+				}
+			}
+
+			if (!earFound) break;
+		}
+
+		// Fallback: if ear clipping didn't complete, use fan triangulation
+		if (remaining.size() >= 3) {
+			for (std::size_t i = 1; i + 1 < remaining.size(); ++i) {
+				mesh.addTriangle(remaining[0], remaining[i], remaining[i + 1]);
 				filled++;
 			}
 		}
 	}
 
 	return filled;
+}
+
+int removeSpikes(Mesh& mesh, double normalThreshold) {
+	int removed = 0;
+
+	// Build edge adjacency
+	std::unordered_map<uint64_t, std::vector<int>> edgeTris;
+	int n = static_cast<int>(mesh.triangleCount());
+	for (int i = 0; i < n; ++i) {
+		const Triangle* tri = mesh.triangle(i);
+		if (!tri) continue;
+		for (int j = 0; j < 3; ++j) {
+			int v0 = tri->vertex(j)->index;
+			int v1 = tri->vertex((j + 1) % 3)->index;
+			uint64_t key = (uint64_t((std::min)(v0, v1)) << 32) | uint64_t((std::max)(v0, v1));
+			edgeTris[key].push_back(i);
+		}
+	}
+
+	// Find spikes: triangles whose normal differs greatly from neighbors
+	std::vector<bool> isSpike(n, false);
+	for (int i = 0; i < n; ++i) {
+		const Triangle* tri = mesh.triangle(i);
+		if (!tri) continue;
+
+		// Collect neighbor normals
+		Vec3 avgNormal(0, 0, 0);
+		int neighborCount = 0;
+
+		for (int j = 0; j < 3; ++j) {
+			int v0 = tri->vertex(j)->index;
+			int v1 = tri->vertex((j + 1) % 3)->index;
+			uint64_t key = (uint64_t((std::min)(v0, v1)) << 32) | uint64_t((std::max)(v0, v1));
+			auto it = edgeTris.find(key);
+			if (it == edgeTris.end()) continue;
+
+			for (int ni : it->second) {
+				if (ni == i) continue;
+				const Triangle* neighbor = mesh.triangle(ni);
+				if (!neighbor) continue;
+				avgNormal = avgNormal + neighbor->normal();
+				neighborCount++;
+			}
+		}
+
+		if (neighborCount == 0) continue;
+
+		avgNormal = avgNormal / static_cast<double>(neighborCount);
+		double avgLen = avgNormal.cachedLength();
+		if (avgLen < 1e-12) continue;
+
+		Vec3 avgDir = avgNormal / avgLen;
+		double dot = tri->normal().dot(avgDir);
+
+		if (dot < normalThreshold) {
+			isSpike[i] = true;
+			removed++;
+		}
+	}
+
+	if (removed == 0) return 0;
+
+	// Remove spikes
+	Mesh newMesh;
+	std::vector<int> oldToNew(mesh.vertexCount(), -1);
+
+	for (int i = 0; i < static_cast<int>(mesh.vertexCount()); ++i) {
+		const Vertex* v = mesh.findByIndex(i);
+		if (v) oldToNew[i] = newMesh.addVertex(v->x, v->y, v->z)->index;
+	}
+
+	for (int i = 0; i < n; ++i) {
+		if (isSpike[i]) continue;
+		const Triangle* tri = mesh.triangle(i);
+		if (!tri) continue;
+		newMesh.addTriangle(
+			oldToNew[tri->vertex(0)->index],
+			oldToNew[tri->vertex(1)->index],
+			oldToNew[tri->vertex(2)->index]);
+	}
+
+	mesh = std::move(newMesh);
+	return removed;
+}
+
+int removeSmallComponents(Mesh& mesh, int minTriangles) {
+	// Find connected components
+	std::vector<int> component(mesh.triangleCount(), -1);
+	int compCount = 0;
+
+	for (int i = 0; i < static_cast<int>(mesh.triangleCount()); ++i) {
+		if (component[i] >= 0) continue;
+		const Triangle* tri = mesh.triangle(i);
+		if (!tri) continue;
+
+		// BFS
+		std::queue<int> q;
+		q.push(i);
+		component[i] = compCount;
+
+		while (!q.empty()) {
+			int cur = q.front(); q.pop();
+			const Triangle* t = mesh.triangle(cur);
+			if (!t) continue;
+
+			for (int e = 0; e < 3; ++e) {
+				const Edge* edge = t->edge(e);
+				if (!edge) continue;
+
+				for (Triangle* n : edge->triangles()) {
+					if (n && component[n->index] < 0) {
+						component[n->index] = compCount;
+						q.push(n->index);
+					}
+				}
+				const Edge* opp = edge->opposite();
+				if (opp) {
+					for (Triangle* n : opp->triangles()) {
+						if (n && component[n->index] < 0) {
+							component[n->index] = compCount;
+							q.push(n->index);
+						}
+					}
+				}
+			}
+		}
+		compCount++;
+	}
+
+	// Count triangles per component
+	std::vector<int> compSize(compCount, 0);
+	for (int i = 0; i < static_cast<int>(mesh.triangleCount()); ++i) {
+		if (component[i] >= 0) compSize[component[i]]++;
+	}
+
+	// Find components to remove
+	std::vector<bool> removeComp(compCount, false);
+	int removed = 0;
+	for (int c = 0; c < compCount; ++c) {
+		if (compSize[c] < minTriangles) {
+			removeComp[c] = true;
+			removed += compSize[c];
+		}
+	}
+
+	if (removed == 0) return 0;
+
+	// Rebuild mesh without small components
+	Mesh newMesh;
+	std::vector<int> oldToNew(mesh.vertexCount(), -1);
+
+	for (int i = 0; i < static_cast<int>(mesh.triangleCount()); ++i) {
+		if (removeComp[component[i]]) continue;
+		const Triangle* tri = mesh.triangle(i);
+		if (!tri) continue;
+
+		for (int j = 0; j < 3; ++j) {
+			int oi = tri->vertex(j)->index;
+			if (oldToNew[oi] < 0) {
+				oldToNew[oi] = newMesh.addVertex(
+					tri->vertex(j)->x, tri->vertex(j)->y, tri->vertex(j)->z)->index;
+			}
+		}
+		newMesh.addTriangle(
+			oldToNew[tri->vertex(0)->index],
+			oldToNew[tri->vertex(1)->index],
+			oldToNew[tri->vertex(2)->index]);
+	}
+
+	mesh = std::move(newMesh);
+	return removed;
 }
 
 } // namespace mesh_repair

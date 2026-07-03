@@ -16,6 +16,10 @@ struct RepairOptions {
 	bool removeDuplicates = true;
 	bool removeIsolated = true;
 	bool fillHoles = true;
+	bool removeSpikes = true;
+	bool removeSmallComponents = true;
+	int minComponentTriangles = 10;
+	double spikeNormalThreshold = 0.1;
 };
 
 struct RepairReport {
@@ -25,6 +29,8 @@ struct RepairReport {
 	int removedIsolated = 0;
 	int flippedFaces = 0;
 	int filledHoles = 0;
+	int removedSpikes = 0;
+	int removedComponents = 0;
 };
 
 // Forward declarations
@@ -34,6 +40,8 @@ int removeDuplicateTriangles(Mesh& mesh);
 int removeIsolatedVertices(Mesh& mesh);
 int fixOrientation(Mesh& mesh);
 int fillHoles(Mesh& mesh);
+int removeSpikes(Mesh& mesh, double normalThreshold);
+int removeSmallComponents(Mesh& mesh, int minTriangles);
 
 // One-click repair
 inline RepairReport repair(Mesh& mesh, const RepairOptions& opts = {}) {
@@ -49,6 +57,10 @@ inline RepairReport repair(Mesh& mesh, const RepairOptions& opts = {}) {
 		report.removedIsolated = removeIsolatedVertices(mesh);
 	if (opts.fillHoles)
 		report.filledHoles = fillHoles(mesh);
+	if (opts.removeSpikes)
+		report.removedSpikes = removeSpikes(mesh, opts.spikeNormalThreshold);
+	if (opts.removeSmallComponents)
+		report.removedComponents = removeSmallComponents(mesh, opts.minComponentTriangles);
 	return report;
 }
 
