@@ -184,16 +184,18 @@ Mesh api_make_prism(int sides, double height, double bottomRadius, double topRad
 		mesh.addVertex(topRadius * std::cos(angle), halfH, topRadius * std::sin(angle));
 	}
 
-	// Bottom face (fan): normal should point -Y (downward)
-	// CCW when viewed from below: reverse order
-	for (int i = 1; i < sides - 1; ++i) {
-		mesh.addTriangle(botStart, botStart + i, botStart + i + 1);
+	// Bottom face: center-vertex triangulation for better mesh quality
+	int botCenter = mesh.addVertex(0, -halfH, 0)->index;
+	for (int i = 0; i < sides; ++i) {
+		int next = (i + 1) % sides;
+		mesh.addTriangle(botCenter, botStart + i, botStart + next);
 	}
 
-	// Top face (fan): normal should point +Y (upward)
-	// CCW when viewed from above
-	for (int i = 1; i < sides - 1; ++i) {
-		mesh.addTriangle(topStart, topStart + i + 1, topStart + i);
+	// Top face: center-vertex triangulation
+	int topCenter = mesh.addVertex(0, halfH, 0)->index;
+	for (int i = 0; i < sides; ++i) {
+		int next = (i + 1) % sides;
+		mesh.addTriangle(topCenter, topStart + next, topStart + i);
 	}
 
 	// Side faces: outward-facing
@@ -228,9 +230,11 @@ Mesh api_make_pyramid(int sides, double bottomRadius, double height) {
 	// Apex
 	int apex = mesh.addVertex(0, height, 0)->index;
 
-	// Bottom face (fan): normal -Y, CCW from below
-	for (int i = 1; i < sides - 1; ++i) {
-		mesh.addTriangle(botStart, botStart + i, botStart + i + 1);
+	// Bottom face: center-vertex triangulation
+	int botCenter = mesh.addVertex(0, 0, 0)->index;
+	for (int i = 0; i < sides; ++i) {
+		int next = (i + 1) % sides;
+		mesh.addTriangle(botCenter, botStart + i, botStart + next);
 	}
 
 	// Side faces: outward-facing
