@@ -17,6 +17,7 @@ file(GLOB_RECURSE ALL_HDR CONFIGURE_DEPENDS
 )
 
 add_executable(main main.cpp ${ALL_SRC} ${ALL_HDR})
+target_compile_definitions(main PRIVATE OBJTMP_PROJECT_ROOT="${PROJECT_SOURCE_DIR}")
 
 # Set working directory for VS debugger
 set_target_properties(main PROPERTIES
