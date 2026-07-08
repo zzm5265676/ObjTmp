@@ -7,16 +7,24 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
-file(GLOB_RECURSE ALL_SRC CONFIGURE_DEPENDS
-    ${PROJECT_SOURCE_DIR}/src/*.cpp
-)
-file(GLOB_RECURSE ALL_HDR CONFIGURE_DEPENDS
-    ${PROJECT_SOURCE_DIR}/include/*.hxx
-    ${PROJECT_SOURCE_DIR}/include/*.h
-    ${PROJECT_SOURCE_DIR}/include/*.hpp
+set(MESH_SRC
+    src/core/point.cpp
+    src/core/vec.cpp
+    src/core/vertex.cpp
+    src/mesh/mesh.cpp
 )
 
-add_executable(main main.cpp ${ALL_SRC} ${ALL_HDR})
+set(MESH_HDR
+    include/config.hxx
+    include/core/edge.hxx
+    include/core/point.hxx
+    include/core/triangle.hxx
+    include/core/vec3.hxx
+    include/core/vertex.hxx
+    include/mesh/mesh.hxx
+)
+
+add_executable(main main.cpp ${MESH_SRC} ${MESH_HDR})
 target_compile_definitions(main PRIVATE OBJTMP_PROJECT_ROOT="${PROJECT_SOURCE_DIR}")
 
 # Set working directory for VS debugger

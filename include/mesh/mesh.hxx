@@ -1,44 +1,40 @@
-// mesh.hxx - Mesh class definition
-#pragma once 
+// mesh.hxx - lightweight OBJ mesh with directed edges and component splitting
+#pragma once
+
+#include "core/edge.hxx"
 #include "core/point.hxx"
 #include "core/triangle.hxx"
-#include "core/edge.hxx"
-#include "math/mat4.hxx"
-#include "math/quat.hxx"
-#include "mesh/normals.hxx"
-#include "geometry/geometry_utils.hxx"
-#include <memory>
-#include <unordered_map>
-#include <vector>
-#include <functional>
+#include "core/vertex.hxx"
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cmath>
 #include <fstream>
-#include <sstream>
+#include <iomanip>
+#include <memory>
 #include <queue>
+#include <sstream>
 #include <stdexcept>
 #include <string>
-#include <iomanip>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
-#include <algorithm>
+#include <vector>
+
 inline int parseObjVertexIndex(const std::string& token) {
 	std::size_t pos = token.find('/');
-
-	std::string indexStr;
-
-	if (pos == std::string::npos) {
-		indexStr = token;
-	}
-	else {
-		indexStr = token.substr(0, pos);
-	}
-
+	std::string indexStr = pos == std::string::npos ? token : token.substr(0, pos);
 	return std::stoi(indexStr);
 }
-// hash and equal
+
 struct DirectedEdgeIndexKey {
 	int from = -1;
 	int to = -1;
+
 	DirectedEdgeIndexKey() = default;
 	DirectedEdgeIndexKey(int f, int t) : from(f), to(t) {}
+
 	bool operator==(const DirectedEdgeIndexKey& other) const noexcept {
 		return from == other.from && to == other.to;
 	}
@@ -51,15 +47,23 @@ struct DirectedEdgeIndexKeyHash {
 		return h0 ^ (h1 + 0x9e3779b9 + (h0 << 6) + (h0 >> 2));
 	}
 };
-// hash and equal
+
 struct UndirectedEdgeIndexKey {
 	int a = -1;
 	int b = -1;
+
 	UndirectedEdgeIndexKey() = default;
 	UndirectedEdgeIndexKey(int i0, int i1) {
-		if (i0 <= i1) { a = i0;	b = i1; }
-		else { a = i1; b = i0; }
+		if (i0 <= i1) {
+			a = i0;
+			b = i1;
+		}
+		else {
+			a = i1;
+			b = i0;
+		}
 	}
+
 	bool operator==(const UndirectedEdgeIndexKey& other) const noexcept {
 		return a == other.a && b == other.b;
 	}
@@ -78,83 +82,25 @@ struct EdgePair {
 	Edge* ba = nullptr;
 };
 
-// Validation report
-// Check for contradictions in Mesh
-struct MeshValidationReport {
-	std::vector<int> invalidVertexIndices;
-	std::vector<int> invalidTriangleIndices;
-	std::vector<int> degenerateTriangles;
-	std::vector<int> triangleEdgeMismatch;
-	std::vector<int> brokenOppositeEdges;
+struct QuantizedVertexKey {
+	long long x = 0;
+	long long y = 0;
+	long long z = 0;
 
-	bool ok() const {
-		return invalidVertexIndices.empty()
-			&& invalidTriangleIndices.empty()
-			&& degenerateTriangles.empty()
-			&& triangleEdgeMismatch.empty()
-			&& brokenOppositeEdges.empty();
+	bool operator==(const QuantizedVertexKey& other) const noexcept {
+		return x == other.x && y == other.y && z == other.z;
 	}
 };
-/**
- *  
- *  
- *  
- *  consistent orientation,
- *  .
- */
-struct MeshCheckReport {
-	// Counts
-	int boundaryEdgeCount = 0;
-	int nonManifoldEdgeCount = 0;
-	int inconsistentOrientationEdgeCount = 0;
-	int nonManifoldVertexCount = 0;
-	int isolatedVertexCount = 0;
-	int degenerateTriangleCount = 0;
-	int selfIntersectingTriangleCount = 0;
 
-	// New counts
-	int connectedComponentCount = 0;
-	int eulerCharacteristic = 0;
-	int boundaryLoopCount = 0;
-	int sliverTriangleCount = 0;
-	int needleTriangleCount = 0;
-	int capTriangleCount = 0;
-
-	// Indices of problematic elements
-	std::vector<int> boundaryEdgeIndices;
-	std::vector<int> nonManifoldEdgeIndices;
-	std::vector<int> inconsistentOrientationEdgeIndices;
-	std::vector<int> nonManifoldVertexIndices;
-	std::vector<int> isolatedVertexIndices;
-	std::vector<int> degenerateTriangleIndices;
-	std::vector<std::pair<int,int>> selfIntersectingPairs;
-
-	// New indices
-	std::vector<int> sliverTriangleIndices;
-	std::vector<int> needleTriangleIndices;
-	std::vector<int> capTriangleIndices;
-
-	// Derived flags
-	bool isWatertight() const {
-		return boundaryEdgeCount == 0
-			&& connectedComponentCount == 1
-			&& eulerCharacteristic == 2;
-	}
-	bool isManifold() const {
-		return nonManifoldEdgeCount == 0 && nonManifoldVertexCount == 0;
-	}
-	bool isOriented() const { return inconsistentOrientationEdgeCount == 0; }
-	bool isDegenerateFree() const { return degenerateTriangleCount == 0; }
-	bool hasSelfIntersection() const { return selfIntersectingTriangleCount > 0; }
-	bool isEulerValid() const { return eulerCharacteristic == 2; }
-	bool isSingleComponent() const { return connectedComponentCount == 1; }
-	bool hasDegenerateSlivers() const { return sliverTriangleCount > 0; }
-
-	bool ok() const {
-		return isWatertight() && isManifold() && isOriented()
-			&& isDegenerateFree() && !hasSelfIntersection();
+struct QuantizedVertexKeyHash {
+	std::size_t operator()(const QuantizedVertexKey& key) const noexcept {
+		std::size_t seed = std::hash<long long>{}(key.x);
+		seed ^= std::hash<long long>{}(key.y) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<long long>{}(key.z) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+		return seed;
 	}
 };
+
 class Mesh {
 private:
 	std::vector<std::unique_ptr<Vertex>> vertices_;
@@ -162,11 +108,31 @@ private:
 	std::vector<std::unique_ptr<Triangle>> triangles_;
 	std::unordered_map<DirectedEdgeIndexKey, Edge*, DirectedEdgeIndexKeyHash> directed_edge_map_;
 
-	// OBJ file loading
 	std::vector<std::array<double, 3>> normals_;
 	std::vector<std::array<double, 2>> texCoords_;
 	std::vector<std::string> parseErrors_;
 
+	static bool isDegenerateTriangle(const Vertex* v0, const Vertex* v1, const Vertex* v2) {
+		if (!v0 || !v1 || !v2) return true;
+
+		Vec3 e1(v1->x - v0->x, v1->y - v0->y, v1->z - v0->z);
+		Vec3 e2(v2->x - v0->x, v2->y - v0->y, v2->z - v0->z);
+		return e1.cross(e2).cachedLength() < 1e-12;
+	}
+
+	static QuantizedVertexKey quantizeVertex(double x, double y, double z, double tolerance) {
+		return {
+			static_cast<long long>(std::llround(x / tolerance)),
+			static_cast<long long>(std::llround(y / tolerance)),
+			static_cast<long long>(std::llround(z / tolerance))
+		};
+	}
+
+	int resolveObjVertexIndex(int objIndex, int objVertexCount) const {
+		if (objIndex > 0) return objIndex - 1;
+		if (objIndex < 0) return objVertexCount + objIndex;
+		return -1;
+	}
 
 public:
 	Mesh(const Mesh&) = delete;
@@ -176,58 +142,90 @@ public:
 	Mesh& operator=(Mesh&&) noexcept = default;
 
 	Mesh() = default;
-	// OBJ file loading
-	Mesh(const std::string& filePath) {
-		std::ifstream input(filePath);
 
+	explicit Mesh(const std::string& filePath, double connectTolerance = 0.0) {
+		if (connectTolerance < 0.0) {
+			throw std::runtime_error("connectTolerance must be non-negative");
+		}
+
+		std::ifstream input(filePath);
 		if (!input.is_open()) {
 			throw std::runtime_error("Failed to open obj file: " + filePath);
 		}
 
+		std::vector<int> objToMeshVertexIndex;
+		std::unordered_map<QuantizedVertexKey, int, QuantizedVertexKeyHash> weldedVertexMap;
+
 		int lineNumber = 0;
 		std::string line;
-
 		while (std::getline(input, line)) {
 			++lineNumber;
-			if (line.empty()) continue;
-			if (line[0] == '#') continue;
+			if (line.empty() || line[0] == '#') continue;
 
 			std::istringstream iss(line);
 			std::string type;
 			iss >> type;
 
 			if (type == "v") {
-				double x, y, z;
+				double x = 0.0;
+				double y = 0.0;
+				double z = 0.0;
 				if (!(iss >> x >> y >> z)) {
 					parseErrors_.push_back("Line " + std::to_string(lineNumber) + ": invalid vertex");
 					continue;
 				}
-				addVertex(x, y, z);
+
+				int meshVertexIndex = -1;
+				if (connectTolerance > 0.0) {
+					QuantizedVertexKey key = quantizeVertex(x, y, z, connectTolerance);
+					auto found = weldedVertexMap.find(key);
+					if (found != weldedVertexMap.end()) {
+						meshVertexIndex = found->second;
+					}
+					else {
+						meshVertexIndex = addVertex(x, y, z)->index;
+						weldedVertexMap.emplace(key, meshVertexIndex);
+					}
+				}
+				else {
+					meshVertexIndex = addVertex(x, y, z)->index;
+				}
+				objToMeshVertexIndex.push_back(meshVertexIndex);
 			}
 			else if (type == "vn") {
-				double nx, ny, nz;
+				double nx = 0.0;
+				double ny = 0.0;
+				double nz = 0.0;
 				if (!(iss >> nx >> ny >> nz)) {
 					parseErrors_.push_back("Line " + std::to_string(lineNumber) + ": invalid normal");
 					continue;
 				}
-				normals_.push_back({nx, ny, nz});
+				normals_.push_back({ nx, ny, nz });
 			}
 			else if (type == "vt") {
-				double u, v;
+				double u = 0.0;
+				double v = 0.0;
 				if (!(iss >> u >> v)) {
 					parseErrors_.push_back("Line " + std::to_string(lineNumber) + ": invalid texcoord");
 					continue;
 				}
-				texCoords_.push_back({u, v});
+				texCoords_.push_back({ u, v });
 			}
 			else if (type == "f") {
 				std::vector<int> indices;
 				std::string token;
-
 				while (iss >> token) {
 					try {
-						int objIndex = parseObjVertexIndex(token);
-						indices.push_back(objIndex - 1);
+						int objVertexIndex = resolveObjVertexIndex(
+							parseObjVertexIndex(token),
+							static_cast<int>(objToMeshVertexIndex.size()));
+						if (objVertexIndex >= 0
+							&& objVertexIndex < static_cast<int>(objToMeshVertexIndex.size())) {
+							indices.push_back(objToMeshVertexIndex[static_cast<std::size_t>(objVertexIndex)]);
+						}
+						else {
+							indices.push_back(-1);
+						}
 					}
 					catch (const std::exception& e) {
 						parseErrors_.push_back("Line " + std::to_string(lineNumber)
@@ -241,316 +239,222 @@ public:
 					continue;
 				}
 
-				// Check index range
 				bool validRange = true;
 				for (int idx : indices) {
 					if (idx < 0 || idx >= static_cast<int>(vertices_.size())) {
 						parseErrors_.push_back("Line " + std::to_string(lineNumber)
-							+ ": vertex index " + std::to_string(idx + 1) + " out of range");
+							+ ": vertex index out of range");
 						validRange = false;
 						break;
 					}
 				}
 				if (!validRange) continue;
 
-				// Triangle: add directly
-				if (indices.size() == 3) {
-					addTriangle(indices[0], indices[1], indices[2]);
-				}
-				else {
-					// Polygon: fan triangulation
-					for (std::size_t i = 1; i + 1 < indices.size(); ++i) {
-						addTriangle(indices[0], indices[i], indices[i + 1]);
+				for (std::size_t i = 1; i + 1 < indices.size(); ++i) {
+					if (!addTriangle(indices[0], indices[i], indices[i + 1])) {
+						parseErrors_.push_back("Line " + std::to_string(lineNumber)
+							+ ": skipped degenerate triangle");
 					}
 				}
 			}
-			// Ignore other lines
 		}
 	}
 
-	// Get parse errors
 	const std::vector<std::string>& parseErrors() const noexcept {
 		return parseErrors_;
 	}
 
-	// Get normal data
 	const std::vector<std::array<double, 3>>& normals() const noexcept {
 		return normals_;
 	}
 
-	// Get texture coordinates
 	const std::vector<std::array<double, 2>>& texCoords() const noexcept {
 		return texCoords_;
 	}
-	// Add vertex
+
 	Vertex* addVertex(double x, double y, double z) {
 		int idx = static_cast<int>(vertices_.size());
 		vertices_.push_back(std::make_unique<Vertex>(idx, x, y, z));
 		return vertices_.back().get();
 	}
-	// Find by index
+
 	Vertex* findByIndex(int idx) {
-		if (idx < 0 || idx >= static_cast<int>(vertices_.size())) {
-			return nullptr;
-		}
+		if (idx < 0 || idx >= static_cast<int>(vertices_.size())) return nullptr;
 		return vertices_[idx].get();
 	}
+
 	const Vertex* findByIndex(int idx) const {
-		if (idx < 0 || idx >= static_cast<int>(vertices_.size())) {
-			return nullptr;
-		}
+		if (idx < 0 || idx >= static_cast<int>(vertices_.size())) return nullptr;
 		return vertices_[idx].get();
-	}
-	// Get undirected edge pair by vertex indices
-	EdgePair getUndirectedEdgePair(int i0, int i1) const {
-		EdgePair pair;
-		auto it_ab = directed_edge_map_.find(DirectedEdgeIndexKey(i0, i1));
-		if (it_ab != directed_edge_map_.end()) pair.ab = it_ab->second;
-		auto it_ba = directed_edge_map_.find(DirectedEdgeIndexKey(i1, i0));
-		if (it_ba != directed_edge_map_.end()) pair.ba = it_ba->second;
-		return pair;
-	}
-
-	// Collect all unique undirected edge pairs
-	std::vector<std::pair<UndirectedEdgeIndexKey, EdgePair>> collectUndirectedEdges() const {
-		std::unordered_set<UndirectedEdgeIndexKey, UndirectedEdgeIndexKeyHash> seen;
-		std::vector<std::pair<UndirectedEdgeIndexKey, EdgePair>> result;
-		for (const auto& entry : directed_edge_map_) {
-			const Edge* e = entry.second;
-			if (!e || !e->from() || !e->to()) continue;
-			UndirectedEdgeIndexKey ukey(e->from()->index, e->to()->index);
-			if (seen.insert(ukey).second) {
-				result.emplace_back(ukey, getUndirectedEdgePair(ukey.a, ukey.b));
-			}
-		}
-		return result;
-	}
-
-	// Find or add edge
-	// Return existing or create new
-	Edge* findOrAddEdge(Vertex* v0, Vertex* v1) {
-		if (!v0 || !v1) { return nullptr; }
-		if (v0 == v1) { return nullptr; }
-
-		// Search directed edge
-		// Search for existing
-		// Directed edge key
-		DirectedEdgeIndexKey dkey(v0->index, v1->index);
-		// Search for existing
-		auto dit = directed_edge_map_.find(dkey);
-		if (dit != directed_edge_map_.end()) {
-			return dit->second;
-		}
-		// Not found, prepare to create
-		int idx = static_cast<int>(edges_.size());
-		auto edge = std::make_unique<Edge>(idx, v0, v1);
-		Edge* raw = edge.get();
-
-
-
-
-
-		// Directed edge
-		// Reverse direction
-		// Create reverse edge
-		DirectedEdgeIndexKey reverse_key(v1->index, v0->index);
-		// Search for reverse
-		auto rit = directed_edge_map_.find(reverse_key);
-		if (rit != directed_edge_map_.end()) {
-			Edge* opposite = rit->second;
-			// Edge supports opposite, set from here
-			raw->setOpposite(opposite);
-			//opposite->setOpposite(raw);
-		}
-
-		// edges_
-		edges_.push_back(std::move(edge));
-		// directed_edge_map_
-		directed_edge_map_.emplace(dkey, raw);
-
-		v0->addNeiVertex(v1);
-		v1->addNeiVertex(v0);
-
-		v0->addNeiEdge(raw);
-		v1->addNeiEdge(raw);
-
-		return raw;
-	}
-	Triangle* addTriangle(int firstIdx, int secondIdx, int thirdIdx) {
-		// Get vertex
-		Vertex* firstVertex = findByIndex(firstIdx);
-		Vertex* secondVertex = findByIndex(secondIdx);
-		Vertex* thirdVertex = findByIndex(thirdIdx);
-		if (!firstVertex || !secondVertex || !thirdVertex) {
-			return nullptr;
-		}
-		if (firstVertex == secondVertex ||
-			secondVertex == thirdVertex ||
-			thirdVertex == firstVertex) {
-			return nullptr;
-		}
-		// 
-		// 
-		// edges_
-		Edge* edge_1 = findOrAddEdge(firstVertex, secondVertex);
-		Edge* edge_2 = findOrAddEdge(secondVertex, thirdVertex);
-		Edge* edge_3 = findOrAddEdge(thirdVertex, firstVertex);
-		//Edge* edge_4 = findOrAddEdge(secondVertex, firstVertex);
-		//Edge* edge_5 = findOrAddEdge(thirdVertex, secondVertex);
-		//Edge* edge_6 = findOrAddEdge(firstVertex, thirdVertex);
-		if (!edge_1 || !edge_2 || !edge_3) {
-			return nullptr;
-		}
-		//
-		int triIndex = triangles_.size();
-		std::unique_ptr<Triangle> tri = std::make_unique<Triangle>(triIndex, firstVertex, secondVertex, thirdVertex);
-		Triangle* raw = tri.get();
-		if (raw->area < 1e-12) {
-			return nullptr;
-		}
-		//triangles_
-		triangles_.push_back(std::move(tri));
-		//
-		firstVertex->addNeiTri(raw);
-		secondVertex->addNeiTri(raw);
-		thirdVertex->addNeiTri(raw);
-		//
-		edge_1->addTriangle(raw);
-		edge_2->addTriangle(raw);
-		edge_3->addTriangle(raw);
-		//
-		raw->setEdges(edge_1, edge_2, edge_3);
-		return raw;
 	}
 
 	std::size_t vertexCount() const noexcept {
 		return vertices_.size();
 	}
+
 	std::size_t edgeCount() const noexcept {
 		return edges_.size();
 	}
+
 	std::size_t triangleCount() const noexcept {
 		return triangles_.size();
 	}
 
-	// Access triangle by index
-	const Triangle* triangle(int idx) const {
-		if (idx < 0 || idx >= static_cast<int>(triangles_.size())) return nullptr;
-		return triangles_[idx].get();
-	}
 	Triangle* triangle(int idx) {
 		if (idx < 0 || idx >= static_cast<int>(triangles_.size())) return nullptr;
 		return triangles_[idx].get();
 	}
 
-	// Connected component analysis
-	// Connected component analysis
+	const Triangle* triangle(int idx) const {
+		if (idx < 0 || idx >= static_cast<int>(triangles_.size())) return nullptr;
+		return triangles_[idx].get();
+	}
+
+	EdgePair getUndirectedEdgePair(int i0, int i1) const {
+		EdgePair pair;
+		auto itAB = directed_edge_map_.find(DirectedEdgeIndexKey(i0, i1));
+		if (itAB != directed_edge_map_.end()) pair.ab = itAB->second;
+
+		auto itBA = directed_edge_map_.find(DirectedEdgeIndexKey(i1, i0));
+		if (itBA != directed_edge_map_.end()) pair.ba = itBA->second;
+		return pair;
+	}
+
+	std::vector<std::pair<UndirectedEdgeIndexKey, EdgePair>> collectUndirectedEdges() const {
+		std::unordered_set<UndirectedEdgeIndexKey, UndirectedEdgeIndexKeyHash> seen;
+		std::vector<std::pair<UndirectedEdgeIndexKey, EdgePair>> result;
+		result.reserve(directed_edge_map_.size());
+
+		for (const auto& entry : directed_edge_map_) {
+			const Edge* edge = entry.second;
+			if (!edge || !edge->from() || !edge->to()) continue;
+
+			UndirectedEdgeIndexKey key(edge->from()->index, edge->to()->index);
+			if (seen.insert(key).second) {
+				result.emplace_back(key, getUndirectedEdgePair(key.a, key.b));
+			}
+		}
+		return result;
+	}
+
+	Edge* findOrAddEdge(Vertex* v0, Vertex* v1) {
+		if (!v0 || !v1 || v0 == v1) return nullptr;
+
+		DirectedEdgeIndexKey key(v0->index, v1->index);
+		auto it = directed_edge_map_.find(key);
+		if (it != directed_edge_map_.end()) return it->second;
+
+		int idx = static_cast<int>(edges_.size());
+		auto edge = std::make_unique<Edge>(idx, v0, v1);
+		Edge* raw = edge.get();
+
+		auto oppositeIt = directed_edge_map_.find(DirectedEdgeIndexKey(v1->index, v0->index));
+		if (oppositeIt != directed_edge_map_.end()) {
+			raw->setOpposite(oppositeIt->second);
+		}
+
+		edges_.push_back(std::move(edge));
+		directed_edge_map_.emplace(key, raw);
+
+		v0->addNeiVertex(v1);
+		v1->addNeiVertex(v0);
+		v0->addNeiEdge(raw);
+		v1->addNeiEdge(raw);
+		return raw;
+	}
+
+	Triangle* addTriangle(int firstIdx, int secondIdx, int thirdIdx) {
+		Vertex* firstVertex = findByIndex(firstIdx);
+		Vertex* secondVertex = findByIndex(secondIdx);
+		Vertex* thirdVertex = findByIndex(thirdIdx);
+
+		if (!firstVertex || !secondVertex || !thirdVertex) return nullptr;
+		if (firstVertex == secondVertex || secondVertex == thirdVertex || thirdVertex == firstVertex) {
+			return nullptr;
+		}
+		if (isDegenerateTriangle(firstVertex, secondVertex, thirdVertex)) {
+			return nullptr;
+		}
+
+		Edge* edge0 = findOrAddEdge(firstVertex, secondVertex);
+		Edge* edge1 = findOrAddEdge(secondVertex, thirdVertex);
+		Edge* edge2 = findOrAddEdge(thirdVertex, firstVertex);
+		if (!edge0 || !edge1 || !edge2) return nullptr;
+
+		int triIndex = static_cast<int>(triangles_.size());
+		auto tri = std::make_unique<Triangle>(triIndex, firstVertex, secondVertex, thirdVertex);
+		Triangle* raw = tri.get();
+
+		triangles_.push_back(std::move(tri));
+
+		firstVertex->addNeiTri(raw);
+		secondVertex->addNeiTri(raw);
+		thirdVertex->addNeiTri(raw);
+
+		edge0->addTriangle(raw);
+		edge1->addTriangle(raw);
+		edge2->addTriangle(raw);
+		raw->setEdges(edge0, edge1, edge2);
+		return raw;
+	}
+
 	std::vector<std::vector<Vertex*>> connectedVertexComponents() const {
 		std::vector<std::vector<Vertex*>> components;
 		std::unordered_set<Vertex*> visited;
-		for (const std::unique_ptr<Vertex>& vptr : vertices_) {
-			Vertex* start = vptr.get();
+		visited.reserve(vertices_.size());
 
-			//  
-			if (!start) continue;
-			if (visited.find(start) != visited.end()) continue;
+		for (const auto& vertexPtr : vertices_) {
+			Vertex* start = vertexPtr.get();
+			if (!start || visited.find(start) != visited.end()) continue;
 
 			std::vector<Vertex*> component;
-			std::queue<Vertex*> q;
+			std::queue<Vertex*> queue;
 
 			visited.insert(start);
-			q.push(start);
+			queue.push(start);
 
-			while (!q.empty()) {
-				// Dequeue front
-				Vertex* cur = q.front();
-				q.pop();
-				component.push_back(cur);
+			while (!queue.empty()) {
+				Vertex* current = queue.front();
+				queue.pop();
+				component.push_back(current);
 
-				// traverse neighbors
-				for (Vertex* nei : cur->getNeiVertics()) {
-					// traverse neighbors
-					if (!nei) continue;
-					if (visited.find(nei) != visited.end()) continue;
-
-					visited.insert(nei);
-					q.push(nei);
+				for (Vertex* neighbor : current->getNeiVertics()) {
+					if (!neighbor || visited.find(neighbor) != visited.end()) continue;
+					visited.insert(neighbor);
+					queue.push(neighbor);
 				}
-
 			}
+
 			components.push_back(std::move(component));
 		}
+
 		return components;
-
 	}
-	// Collect triangles from vertex component
-	std::vector<Triangle*> collectTriangleFromVertexComponent(const std::vector<Vertex*>& component) {
+
+	std::vector<Triangle*> collectTriangleFromVertexComponent(const std::vector<Vertex*>& component) const {
 		std::unordered_set<Triangle*> triSet;
-		for (Vertex* vt : component) {
-			if (!vt) continue;
-			for (Triangle* tri : vt->getNeiTriangles()) {
-				if (!tri) continue;
-				triSet.insert(tri);
+		for (Vertex* vertex : component) {
+			if (!vertex) continue;
+			for (Triangle* tri : vertex->getNeiTriangles()) {
+				if (tri) triSet.insert(tri);
 			}
 		}
-		return std::vector<Triangle*>(triSet.begin(), triSet.end());
-	}
-	// Split by components
-	std::vector<Mesh> splitComponents() {
-		std::vector<Mesh> results;
-		// Get connected components
-		std::vector<std::vector<Vertex*>> components = connectedVertexComponents();
-		// Process each component
-		for (std::vector<Vertex*> component : components) {
-			Mesh subMesh;
-			std::unordered_map<Vertex*, int> oldToNewIndex;
 
-			//
-			for (Vertex* oldVertex : component) {
-				Vertex* newVertex = subMesh.addVertex(oldVertex->x, oldVertex->y, oldVertex->z);
-				//-
-				oldToNewIndex[oldVertex] = newVertex->index;
-			}
-			//
-			std::vector<Triangle*> tris = collectTriangleFromVertexComponent(component);
-			for (Triangle* oldTri : tris) {
-				// Get old vertices
-				Vertex* ov0 = oldTri->vertex(0);
-				Vertex* ov1 = oldTri->vertex(1);
-				Vertex* ov2 = oldTri->vertex(2);
-
-				if (!ov0 || !ov1 || !ov2) {
-					continue;
-				}
-				// Get old-new mapping
-				std::unordered_map<Vertex*, int>::iterator it0 = oldToNewIndex.find(ov0);
-				std::unordered_map<Vertex*, int>::iterator it1 = oldToNewIndex.find(ov1);
-				std::unordered_map<Vertex*, int>::iterator it2 = oldToNewIndex.find(ov2);
-
-				if (it0 == oldToNewIndex.end() ||
-					it1 == oldToNewIndex.end() ||
-					it2 == oldToNewIndex.end()) {
-					continue;
-				}
-				// Add new triangle
-				subMesh.addTriangle(it0->second, it1->second, it2->second);
-			}
-			results.push_back(std::move(subMesh));
-		}
-		return results;
+		std::vector<Triangle*> triangles(triSet.begin(), triSet.end());
+		std::sort(triangles.begin(), triangles.end(), [](const Triangle* lhs, const Triangle* rhs) {
+			return lhs->index < rhs->index;
+		});
+		return triangles;
 	}
 
-	// Connected triangle components
 	std::vector<std::vector<Triangle*>> connectedTriangleComponents() const {
 		std::vector<std::vector<Triangle*>> components;
 		std::unordered_set<Triangle*> visited;
+		visited.reserve(triangles_.size());
 
-		for (const auto& tptr : triangles_) {
-			Triangle* start = tptr.get();
-
-			if (!start || visited.find(start) != visited.end()) {
-				continue;
-			}
+		for (const auto& triPtr : triangles_) {
+			Triangle* start = triPtr.get();
+			if (!start || visited.find(start) != visited.end()) continue;
 
 			std::vector<Triangle*> component;
 			std::queue<Triangle*> queue;
@@ -561,32 +465,23 @@ public:
 			while (!queue.empty()) {
 				Triangle* current = queue.front();
 				queue.pop();
-
 				component.push_back(current);
 
 				for (int i = 0; i < 3; ++i) {
 					Edge* edge = current->edge(i);
-					if (!edge) {
-						continue;
-					}
+					if (!edge) continue;
 
-					auto enqueueTriangles =
-						[&](const std::unordered_set<Triangle*>& triangles) {
+					auto enqueueTriangles = [&](const std::unordered_set<Triangle*>& triangles) {
 						for (Triangle* neighbor : triangles) {
-							if (neighbor &&
-								visited.insert(neighbor).second) {
+							if (neighbor && visited.insert(neighbor).second) {
 								queue.push(neighbor);
 							}
 						}
-						};
+					};
 
-					// Same orientation shared edge
 					enqueueTriangles(edge->triangles());
-
-					// Also check opposite edge
-					Edge* opposite = edge->opposite();
-					if (opposite) {
-						enqueueTriangles(opposite->triangles());
+					if (edge->opposite()) {
+						enqueueTriangles(edge->opposite()->triangles());
 					}
 				}
 			}
@@ -597,285 +492,93 @@ public:
 		return components;
 	}
 
+	std::vector<Mesh> splitComponents() const {
+		std::vector<Mesh> results;
+		std::vector<std::vector<Vertex*>> components = connectedVertexComponents();
+		results.reserve(components.size());
 
+		for (const auto& component : components) {
+			Mesh subMesh;
+			std::unordered_map<Vertex*, int> oldToNewIndex;
+			oldToNewIndex.reserve(component.size());
 
+			for (Vertex* oldVertex : component) {
+				if (!oldVertex) continue;
+				Vertex* newVertex = subMesh.addVertex(oldVertex->x, oldVertex->y, oldVertex->z);
+				oldToNewIndex[oldVertex] = newVertex->index;
+			}
 
+			std::vector<Triangle*> tris = collectTriangleFromVertexComponent(component);
+			for (Triangle* oldTri : tris) {
+				if (!oldTri) continue;
 
+				Vertex* ov0 = oldTri->vertex(0);
+				Vertex* ov1 = oldTri->vertex(1);
+				Vertex* ov2 = oldTri->vertex(2);
+				if (!ov0 || !ov1 || !ov2) continue;
 
+				auto it0 = oldToNewIndex.find(ov0);
+				auto it1 = oldToNewIndex.find(ov1);
+				auto it2 = oldToNewIndex.find(ov2);
+				if (it0 == oldToNewIndex.end()
+					|| it1 == oldToNewIndex.end()
+					|| it2 == oldToNewIndex.end()) {
+					continue;
+				}
 
-	//
+				subMesh.addTriangle(it0->second, it1->second, it2->second);
+			}
+
+			results.push_back(std::move(subMesh));
+		}
+
+		return results;
+	}
+
 	bool exportObj(const std::string& filePath) const {
 		std::ofstream output(filePath);
-
-		if (!output.is_open()) {
-			return false;
-		}
+		if (!output.is_open()) return false;
 
 		output << "# Exported by Mesh::exportObj\n";
 		output << "# Vertices: " << vertices_.size() << "\n";
 		output << "# Triangles: " << triangles_.size() << "\n\n";
+		output << std::fixed << std::setprecision(10);
 
 		std::unordered_map<const Vertex*, int> vertexToObjIndex;
 		vertexToObjIndex.reserve(vertices_.size());
 
-		output << std::fixed << std::setprecision(10);
-
-		// 1. 
 		for (std::size_t i = 0; i < vertices_.size(); ++i) {
-			const Vertex* v = vertices_[i].get();
-
-			if (!v) {
-				continue;
-			}
+			const Vertex* vertex = vertices_[i].get();
+			if (!vertex) continue;
 
 			int objIndex = static_cast<int>(i) + 1;
-			vertexToObjIndex[v] = objIndex;
-
-			output << "v "
-				<< v->x << " "
-				<< v->y << " "
-				<< v->z << "\n";
+			vertexToObjIndex[vertex] = objIndex;
+			output << "v " << vertex->x << " " << vertex->y << " " << vertex->z << "\n";
 		}
 
 		output << "\n";
 
-		// 2. 
 		for (const auto& triPtr : triangles_) {
 			const Triangle* tri = triPtr.get();
-
-			if (!tri) {
-				continue;
-			}
+			if (!tri) continue;
 
 			const Vertex* v0 = tri->vertex(0);
 			const Vertex* v1 = tri->vertex(1);
 			const Vertex* v2 = tri->vertex(2);
-
-			if (!v0 || !v1 || !v2) {
-				continue;
-			}
+			if (!v0 || !v1 || !v2) continue;
 
 			auto it0 = vertexToObjIndex.find(v0);
 			auto it1 = vertexToObjIndex.find(v1);
 			auto it2 = vertexToObjIndex.find(v2);
-
-			if (it0 == vertexToObjIndex.end() ||
-				it1 == vertexToObjIndex.end() ||
-				it2 == vertexToObjIndex.end()) {
+			if (it0 == vertexToObjIndex.end()
+				|| it1 == vertexToObjIndex.end()
+				|| it2 == vertexToObjIndex.end()) {
 				continue;
 			}
 
-			output << "f "
-				<< it0->second << " "
-				<< it1->second << " "
-				<< it2->second << "\n";
+			output << "f " << it0->second << " " << it1->second << " " << it2->second << "\n";
 		}
 
 		return true;
 	}
-
-	// Validation check
-	MeshValidationReport validateBasicTopology(double eps = 1e-12) const;
-	std::size_t directedTriangleCount(const Edge* e) const;
-	std::size_t undirectedTriangleCount(const EdgePair& pair) const;
-	void printEdgeUsageSummary() const;
-
-	//
-	//
-	void checkEdgeManifoldAndBoundary(MeshCheckReport& report) const;
-
-	//
-	void checkOrientationConsistency(MeshCheckReport& report) const;
-
-	//
-	void checkDegenerateTriangles(MeshCheckReport& report) const;
-
-	//
-	void checkNonManifoldVertices(MeshCheckReport& report) const;
-	//
-	bool isNonManifoldVertex(const Vertex* center) const;
-	// Self-intersection detection
-	void checkSelfIntersection(MeshCheckReport& report) const;
-	// Euler characteristic and connected components
-	void checkTopology(MeshCheckReport& report) const;
-	// Sliver/needle/cap triangle detection
-	void checkTriangleQuality(MeshCheckReport& report, double sliverThreshold = 1e-3,
-		double needleRatio = 10.0, double capAngleDeg = 170.0) const;
-	// Combined check (legacy)
-	MeshCheckReport checkManifoldAndWatertight() const;
-	// Unified entry: all checks
-	MeshCheckReport validateAll() const;
-
-	// =====  =====
-
-	// Apply to all vertices
-	void transform(const Mat4& mat) {
-		for (auto& vptr : vertices_) {
-			if (!vptr) continue;
-			Vec3 pos = mat.transformPoint(Vec3(vptr->x, vptr->y, vptr->z));
-			vptr->x = pos.x;
-			vptr->y = pos.y;
-			vptr->z = pos.z;
-		}
-		// Recompute all triangle normals and areas
-		for (auto& triptr : triangles_) {
-			if (triptr) triptr->computeNormalAndArea();
-		}
-	}
-
-	// 
-	void translate(const Vec3& offset) {
-		transform(Mat4::translation(offset));
-	}
-
-	void translate(double dx, double dy, double dz) {
-		transform(Mat4::translation(dx, dy, dz));
-	}
-
-	// 
-	void rotate(const Quat& q) {
-		transform(q.toMat4());
-	}
-
-	// 
-	void rotate(const Vec3& axis, double radians) {
-		transform(Mat4::rotationAxis(axis, radians));
-	}
-
-	// XYZ 
-	void rotateEuler(double pitch, double yaw, double roll) {
-		transform(Quat::fromEuler(pitch, yaw, roll).toMat4());
-	}
-
-	// 
-	void scale(double sx, double sy, double sz) {
-		transform(Mat4::scaling(sx, sy, sz));
-	}
-
-	void scale(double s) {
-		transform(Mat4::scaling(s));
-	}
-
-	// Compute axis-aligned bounding box
-	// Returns: first = min corner, second = max corner
-	std::pair<Vec3, Vec3> boundingBox() const {
-		Vec3 minV(1e30, 1e30, 1e30);
-		Vec3 maxV(-1e30, -1e30, -1e30);
-		for (const auto& vptr : vertices_) {
-			if (!vptr) continue;
-			minV.x = (std::min)(minV.x, vptr->x);
-			minV.y = (std::min)(minV.y, vptr->y);
-			minV.z = (std::min)(minV.z, vptr->z);
-			maxV.x = (std::max)(maxV.x, vptr->x);
-			maxV.y = (std::max)(maxV.y, vptr->y);
-			maxV.z = (std::max)(maxV.z, vptr->z);
-		}
-		return {minV, maxV};
-	}
-
-	// Normalize mesh to fit within [-1, 1] bounding box
-	// 1. Translate so bounding box center is at origin
-	// 2. Uniform scale so longest axis spans [-1, 1]
-	void normalizeToUnit() {
-		auto [minV, maxV] = boundingBox();
-		Vec3 center(
-			(minV.x + maxV.x) * 0.5,
-			(minV.y + maxV.y) * 0.5,
-			(minV.z + maxV.z) * 0.5
-		);
-		Vec3 extent(maxV.x - minV.x, maxV.y - minV.y, maxV.z - minV.z);
-		double maxExtent = (std::max)({extent.x, extent.y, extent.z});
-		if (maxExtent < 1e-15) return;
-		double s = 2.0 / maxExtent;
-		// Order: first translate to origin, then scale
-		Mat4 mat = Mat4::scaling(s) * Mat4::translation(-center);
-		transform(mat);
-	}
-
-	// ===== Normal computation =====
-
-	// Compute normals for all vertices (default: area-weighted)
-	std::vector<Vec3> computeVertexNormals(
-		NormalComputer::VertexNormalMethod method =
-			NormalComputer::VertexNormalMethod::AreaWeighted) const {
-		return NormalComputer::computeAllVertexNormals(vertices_, method);
-	}
-
-	// Compute normals for all edges
-	std::vector<Vec3> computeEdgeNormals() const {
-		return NormalComputer::computeAllEdgeNormals(edges_);
-	}
-
-	// Access individual edge normal
-	Vec3 edgeNormal(int edgeIdx) const {
-		if (edgeIdx < 0 || edgeIdx >= static_cast<int>(edges_.size())) return Vec3(0,0,0);
-		if (!edges_[edgeIdx]) return Vec3(0,0,0);
-		return NormalComputer::edgeNormal(*edges_[edgeIdx]);
-	}
-
-	// Access individual vertex normal
-	Vec3 vertexNormal(int vertexIdx,
-		NormalComputer::VertexNormalMethod method =
-			NormalComputer::VertexNormalMethod::AreaWeighted) const {
-		if (vertexIdx < 0 || vertexIdx >= static_cast<int>(vertices_.size())) return Vec3(0,0,0);
-		if (!vertices_[vertexIdx]) return Vec3(0,0,0);
-		switch (method) {
-		case NormalComputer::VertexNormalMethod::Simple:
-			return NormalComputer::vertexNormalSimple(*vertices_[vertexIdx]);
-		case NormalComputer::VertexNormalMethod::AreaWeighted:
-			return NormalComputer::vertexNormalAreaWeighted(*vertices_[vertexIdx]);
-		case NormalComputer::VertexNormalMethod::AngleWeighted:
-			return NormalComputer::vertexNormalAngleWeighted(*vertices_[vertexIdx]);
-		case NormalComputer::VertexNormalMethod::FromEdges:
-			return NormalComputer::vertexNormalFromEdges(*vertices_[vertexIdx]);
-		}
-		return Vec3(0,0,0);
-	}
-
 };
-
-// classifyPointInMesh: ray casting point-in-mesh test
-// Uses multiple rays to handle degenerate cases
-inline geo::PointClass classifyPointInMesh(const Point& p, const Mesh& mesh, double eps = 1e-8) {
-	// Check if point is on any triangle face
-	for (std::size_t i = 0; i < mesh.triangleCount(); ++i) {
-		const Triangle* tri = mesh.triangle(static_cast<int>(i));
-		if (tri && geo::pointInTriangle(p, tri, eps)) {
-			return geo::PointClass::OnBoundary;
-		}
-	}
-
-	// Cast ray in +X direction, count unique intersection points
-	Point rayEnd(p.x + 1e6, p.y, p.z);
-	std::vector<double> hitTs;
-
-	for (std::size_t i = 0; i < mesh.triangleCount(); ++i) {
-		const Triangle* tri = mesh.triangle(static_cast<int>(i));
-		if (!tri) continue;
-
-		Vertex* v0 = tri->vertex(0);
-		Vertex* v1 = tri->vertex(1);
-		Vertex* v2 = tri->vertex(2);
-		if (!v0 || !v1 || !v2) continue;
-
-		Point hit;
-		if (geo::segmentTriangleIntersection(p, rayEnd, tri, hit, eps)) {
-			// Use t parameter to deduplicate
-			double t = hit.x - p.x;  // ray is along +X
-			bool duplicate = false;
-			for (double existing : hitTs) {
-				if (std::abs(existing - t) < eps * 100) {
-					duplicate = true;
-					break;
-				}
-			}
-			if (!duplicate) {
-				hitTs.push_back(t);
-			}
-		}
-	}
-
-	return hitTs.size() % 2 == 1 ? geo::PointClass::Inside : geo::PointClass::Outside;
-}
-
-
