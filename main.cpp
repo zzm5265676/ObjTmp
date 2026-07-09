@@ -1,5 +1,6 @@
 #include "config.hxx"
 #include "mesh/mesh.hxx"
+#include "mesh/outer_shell.hxx"
 
 #include <exception>
 #include <iostream>
@@ -9,18 +10,28 @@
 
 int main(int argc, char** argv) {
 	std::string inputPath = argc > 1 ? argv[1] : config::INPUT_DIR + "jiaban.obj";
-	bool exportComponents = true;
-	std::string outputBase = config::OUTPUT_DIR;
+	bool countOnly = false;
+	bool outerCountOnly = false;
+	bool splitOnly = false;
+	std::string outputPath = config::OUTPUT_DIR + "outer_shells.obj";
 	int toleranceArg = 3;
 
 	if (argc > 2) {
 		std::string secondArg = argv[2];
 		if (secondArg == "--count-only") {
-			exportComponents = false;
+			countOnly = true;
+			toleranceArg = 3;
+		}
+		else if (secondArg == "--outer-count-only") {
+			outerCountOnly = true;
+			toleranceArg = 3;
+		}
+		else if (secondArg == "--split-components") {
+			splitOnly = true;
 			toleranceArg = 3;
 		}
 		else {
-			outputBase = secondArg;
+			outputPath = secondArg;
 			toleranceArg = 3;
 		}
 	}
@@ -46,23 +57,45 @@ int main(int argc, char** argv) {
 		std::vector<Mesh> components = mesh.splitComponents();
 		std::cout << "components: " << components.size() << "\n";
 
-		if (!exportComponents) {
+		if (countOnly) {
 			return 0;
 		}
 
-		for (std::size_t i = 0; i < components.size(); ++i) {
-			std::string outputPath = outputBase + "component_" + std::to_string(i) + ".obj";
-			if (!components[i].exportObj(outputPath)) {
-				std::cerr << "failed to export: " << outputPath << "\n";
-				return 1;
-			}
+		if (splitOnly) {
+			for (std::size_t i = 0; i < components.size(); ++i) {
+				std::string componentPath = config::OUTPUT_DIR + "component_" + std::to_string(i) + ".obj";
+				if (!components[i].exportObj(componentPath)) {
+					std::cerr << "failed to export: " << componentPath << "\n";
+					return 1;
+				}
 
-			std::cout << "component " << i
-				<< ": vertices=" << components[i].vertexCount()
-				<< ", directed_edges=" << components[i].edgeCount()
-				<< ", triangles=" << components[i].triangleCount()
-				<< ", output=" << outputPath << "\n";
+				std::cout << "component " << i
+					<< ": vertices=" << components[i].vertexCount()
+					<< ", directed_edges=" << components[i].edgeCount()
+					<< ", triangles=" << components[i].triangleCount()
+					<< ", output=" << componentPath << "\n";
+			}
+			return 0;
 		}
+
+		std::cout << "filtering enclosed shells...\n";
+		std::vector<std::size_t> keep = mesh_outer::findOuterShellIndices(components, connectTolerance);
+		std::cout << "outer shells: " << keep.size() << "\n";
+		std::cout << "removed enclosed shells: " << (components.size() - keep.size()) << "\n";
+
+		if (outerCountOnly) {
+			return 0;
+		}
+
+		Mesh outerMesh = mesh_outer::mergeShells(components, keep, connectTolerance);
+		if (!outerMesh.exportObj(outputPath)) {
+			std::cerr << "failed to export: " << outputPath << "\n";
+			return 1;
+		}
+
+		std::cout << "output: " << outputPath << "\n";
+		std::cout << "output vertices: " << outerMesh.vertexCount() << "\n";
+		std::cout << "output triangles: " << outerMesh.triangleCount() << "\n";
 	}
 	catch (const std::exception& e) {
 		std::cerr << "error: " << e.what() << "\n";

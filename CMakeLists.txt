@@ -22,6 +22,7 @@ set(MESH_HDR
     include/core/vec3.hxx
     include/core/vertex.hxx
     include/mesh/mesh.hxx
+    include/mesh/outer_shell.hxx
 )
 
 add_executable(main main.cpp ${MESH_SRC} ${MESH_HDR})
