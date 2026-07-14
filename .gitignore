@@ -1,6 +1,11 @@
-build*/
-*.obj
-!data/input/*.obj
-data/output/
-meshlab/
---outer-count-only
+*
+
+!.gitignore
+!CMakeLists.txt
+!main.cpp
+
+!include/
+!include/**
+
+!src/
+!src/**

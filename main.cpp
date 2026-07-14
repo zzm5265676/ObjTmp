@@ -9,7 +9,7 @@
 #include <vector>
 
 int main(int argc, char** argv) {
-	std::string inputPath = argc > 1 ? argv[1] : config::INPUT_DIR + "jiaban.obj";
+	std::string inputPath = argc > 1 ? argv[1] : config::INPUT_DIR + "fdx.obj";
 	bool countOnly = false;
 	bool outerCountOnly = false;
 	bool splitOnly = false;
@@ -60,7 +60,6 @@ int main(int argc, char** argv) {
 		if (countOnly) {
 			return 0;
 		}
-
 		if (splitOnly) {
 			for (std::size_t i = 0; i < components.size(); ++i) {
 				std::string componentPath = config::OUTPUT_DIR + "component_" + std::to_string(i) + ".obj";
